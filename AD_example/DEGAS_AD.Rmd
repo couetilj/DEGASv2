@@ -52,7 +52,7 @@ phenotype_df <- data.frame(CERAD = as.integer(patMeta$CERAD),
 ```
 
 # Preprocessing data
-```{r}
+```{r, message=FALSE, warning=FALSE, results='hide'}
 # sc data only
 umap_df <- umap_coordinate(sc_raw_data, scMeta)
 # use CERAD for test

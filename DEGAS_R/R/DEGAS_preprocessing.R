@@ -40,7 +40,7 @@ umap_coordinate <- function(count, metadata = NULL, min.cells = 3, min.features 
 
 # gene selection
 select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE,
-                         n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "survival") {
+                         n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category") {
   genes <- c()
 
   # Bulk HVG
@@ -124,23 +124,28 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
     add_genes <- as.character(add_genes)
     genes <- union(genes, intersect(add_genes, rownames(patdata)))
   }
-
+  genes <- genes[!is.na(genes)]
   return(as.character(genes))
 }
 
-DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL, n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05) {
+DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL, n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category") {
 
   # common genes
   common_genes <- rownames(patdata)
-  if (!is.list(scst_list)) {
-    scst_list <- list(scst_list)
+  if (!is.list(scst_list) || inherits(scst_list, "data.frame")) {
+    scst_list <- list(as.matrix(scst_list))
   }
   for (i in seq_along(scst_list)) {
     common_genes <- intersect(common_genes, rownames(scst_list[[i]]))
   }
 
   patdata <- patdata[common_genes, , drop = FALSE]
-  scst_list <- lapply(scst_list, function(x) x[common_genes, , drop = FALSE])
+
+  scst_list <- lapply(scst_list, function(x) {
+    x <- as.matrix(x)
+    x[common_genes, , drop = FALSE]
+  })
+
 
   # Gene selection
   gene_list <- select_genes(
