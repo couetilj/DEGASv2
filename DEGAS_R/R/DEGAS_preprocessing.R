@@ -1,4 +1,3 @@
-# normalization functions from orig DEGAS
 # zscore normalization
 normFunc <- function(x){return((x-mean(x, na.rm = T))/(sd(x, na.rm = T)+1e-3))}
 
@@ -14,118 +13,192 @@ preprocessCounts <- function(X){
   return(normalizeScale(1.5^log2(X+1)))
 }
 
-normalize_counts_with_selected_genes <- function(bulk_dataset, phenotype, st_list, gene_list, save_name, results_dir, st_lab_list = c()) {
-  # create results save dir
-  if (!file.exists(results_dir)) {
-    dir.create(results_dir)
-  }
-  patDat <- preprocessCounts(bulk_dataset[gene_list,])
-  st_expr_mat <- c()
-  st_meta_mat <- c()
-  st_index_mat <- c() # indicator of which st or sc the sample comes from
-  st_names_list <- c() # list of st or sc names, correspond to st_index_mat, only useful when merging multiple st or sc datasets
-  for (i in c(1:length(st_list))) {
-    st_dataset <- st_list[[i]]
-    st_counts <- GetAssayData(st_dataset, slot = "counts", assay = "RNA")
-    st_counts <- preprocessCounts(as.matrix(st_counts[gene_list, ]))
-    st_expr_mat <- rbind(st_expr_mat, st_counts)
-    tryCatch(
-      {
-        st_coords <- GetTissueCoordinates(st_dataset)
-        meta_data <- st_dataset@meta.data
-        meta_data <- cbind(meta_data, st_coords)
-        st_dataset@meta.data <- meta_data
-      }, error = function(e) {
-        cat("No Coordinate exist, save meta data")
-      }
-    )
-    st_meta <- st_dataset@meta.data
-    st_meta_mat <- rbind(st_meta_mat, st_meta)
-    st_index_mat <- append(st_index_mat, rep(i - 1, dim(st_counts)[1]))
-    st_name <- as.character(st_dataset@meta.data$orig.ident[1])
-    st_names_list <- append(st_names_list, st_name)
-  }
-  # create sc or st label if exist
-  if (length(st_lab_list) > 0) {
-    if (is.numeric(st_lab_list) == FALSE) {
-      strings_factor <- factor(st_lab_list)
-      unique_strings <- levels(strings_factor)
-      st_lab_map <- setNames(unique_strings, as.character((1:length(unique_strings)) - 1))
-      st_lab_mat <- as.integer(strings_factor) - 1
-    } else {
-      if (min(st_lab_list) == 1) {
-        st_lab_mat <- st_lab_list - 1
-      } else {
-        st_lab_mat <- st_lab_list
-      }
-      st_lab_map <- sort(unique(st_lab_mat))
-    }
-  } else {
-    st_lab_mat <- st_index_mat # which slides the sample comes from
-    st_lab_map <- st_names_list
-  }
+# Calculate UMAP coordinate
+umap_coordinate <- function(count, metadata = NULL, min.cells = 3, min.features = 200, nfeatures = 2000, dims = 1:10, resolution = 0.5) {
 
-  save(patDat, phenotype, st_expr_mat, st_meta_mat, st_lab_mat, st_lab_map, st_index_mat, st_names_list, file = paste0(results_dir, "/", save_name, ".RData"))
+  obj <- CreateSeuratObject(
+    counts = as.matrix(count),
+    meta.data = metadata,
+    min.cells = min.cells,
+    min.features = min.features
+  )
+
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj, nfeatures = nfeatures)
+  obj <- ScaleData(obj)
+  obj <- RunPCA(obj)
+  obj <- FindNeighbors(obj, dims = dims)
+  obj <- FindClusters(obj, resolution = resolution)
+  obj <- RunUMAP(obj, dims = dims)
+
+  umap_df <- Embeddings(obj, "umap") %>% as.data.frame()
+  umap_df$cell <- rownames(umap_df)
+  colnames(umap_df)[1:2] <- c("UMAP_1", "UMAP_2")
+
+  return(umap_df)
 }
 
-DEGAS_preprocessing <- function(bulk_dataset, phenotype, st_list, results_dir, st_lab_list = c(), model_type = "survival", diff_expr_files = c(), n_high_var_genes = 250, n_from = 500, n_by = 50, n_until = 250, n_high_diff_genes = 250, padj.thresh = 0.05) {
-  # step 0. create folder save dir
-  if (!file.exists(results_dir)) {
-    dir.create(results_dir)
-  }
-  if (! is.list(st_list)) {
-    st_list <- list(st_list)
+# gene selection
+select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE,
+                         n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "survival") {
+  genes <- c()
+
+  # Bulk HVG
+  if (bulk_hvg) {
+    common_genes <- rownames(patdata)
+    gene_std_df <- data.frame(
+      gene_names = common_genes,
+      stdev = apply(patdata[common_genes, ], 1, sd, na.rm = TRUE)
+    )
+    gene_std_df <- gene_std_df[order(-gene_std_df$stdev), ]
+    high_var_genes <- gene_std_df$gene_names[1:min(n_hvg, nrow(gene_std_df))]
+
+    genes <- union(genes, as.character(high_var_genes))
   }
 
-  # Step 1. get common genes across patients and st datasets
-  common_genes <- rownames(bulk_dataset)
-  for (i in c(1:length(st_list))) {
-    st_counts <- GetAssayData(st_list[[i]], slot = "counts", assay = "RNA")
-    common_genes <- intersect(common_genes, rownames(st_counts))
-  }
-  # Step 2. get high var genes in patients
-  gene_std_df <- data.frame(gene_names = common_genes, stdev = apply(bulk_dataset[common_genes, ], 1, sd))
-  gene_std_df %<>% arrange(desc(stdev))
-  high_var_gene <- gene_std_df$gene_names[1:n_high_var_genes]
-  normalize_counts_with_selected_genes(bulk_dataset, phenotype, st_list, high_var_gene, "Pat_std", results_dir, st_lab_list)
-  # Step 3. select high var sc or st genes
-  if (length(diff_expr_files) > 0) {
-    st_var_gene_list <- list()
-    for (diff_expr_file in diff_expr_files) {
-      high_var_st_gene <- read.csv(diff_expr_file)
-      st_var_gene_list <- union(st_var_gene_list, intersect(common_genes, high_var_st_gene$gene))
+  # Bulk DE
+  if (bulk_de && !is.null(phenotype)) {
+    if (model_type == "survival") {
+      if (!all(c("time","status") %in% colnames(phenotype))) {
+        stop("For survival mode, phenotype must be a data.frame with columns 'time' and 'status'")
+      }
+    } else {
+      phenotype <- as.vector(phenotype)
     }
-    st_var_gene_list <- unlist(st_var_gene_list, recursive = TRUE)
-    while (length(st_var_gene_list) > n_until) {
-      st_var_gene_list <- intersect(st_var_gene_list, gene_std_df$gene_names[1:n_from])
-      n_from <- n_from - n_by
+
+    if (model_type == "survival") {
+      surv_mid <- median(phenotype$time)
+      patLab <- (phenotype$time < surv_mid) * phenotype$status + 1
+    } else {
+      patLab <- phenotype + 1
     }
-    normalize_counts_with_selected_genes(bulk_dataset, phenotype, st_list, st_var_gene_list, "SDE", results_dir, st_lab_list)
-  }
-  # Step 4. select diff expr genes in patients
-  if (model_type == "survival") {
-    surv_mid <- median(phenotype$time)
-    patLab <- (phenotype$time < surv_mid) * phenotype$status + 1
-  } else {
-    patLab <- phenotype + 1
-  }
-  patLab <- as.factor(patLab)
-  # creat DEseq object (This step may takes longer...)
-  tryCatch(
-    {
-      bulk_counts <- bulk_dataset[common_genes, ]
+    patLab <- as.factor(patLab)
+
+    tryCatch({
+      bulk_counts <- patdata
       bulk_counts[bulk_counts < 0] <- 0
       bulk_counts <- apply(bulk_counts, c(1, 2), as.integer)
-      dds <- DESeqDataSetFromMatrix(countData = bulk_counts,
-                                    colData = data.frame(id = colnames(bulk_dataset), label = patLab), design = ~label)
+
+      dds <- DESeqDataSetFromMatrix(
+        countData = bulk_counts,
+        colData   = data.frame(id = colnames(patdata), label = patLab),
+        design    = ~label
+      )
       dds <- DESeq(dds)
-      results <- na.omit(results(dds))
-      results <- results[order(results$padj), ]
-      results <- results[results$padj < padj.thresh, ]
-      high_diff_genes <- rownames(results)[1:min(n_high_diff_genes, length(results$padj))]
-      normalize_counts_with_selected_genes(bulk_dataset, phenotype, st_list, high_diff_genes, "Pat_Diff", results_dir, st_lab_list)
+      res <- na.omit(results(dds))
+      res <- res[order(res$padj), ]
+      res <- res[res$padj < padj.thresh, ]
+
+      high_diff_genes <- rownames(res)[1:min(n_bulk_de, nrow(res))]
+      genes <- union(genes, as.character(high_diff_genes))
     }, error = function(e) {
-      cat("There are some error in finding DEG. We terminate this step.")
-    }
-  )
+      message("Bulk DE gene selection failed: ", e$message)
+    })
+  }
+
+  # 3. SC/ST cluster DE
+  if (sc_de && !is.null(scdata) && !is.null(sclab)) {
+    obj <- CreateSeuratObject(counts = as.matrix(scdata), meta.data = sclab)
+    obj <- NormalizeData(obj)
+    obj <- FindVariableFeatures(obj)
+    obj <- ScaleData(obj)
+    obj <- RunPCA(obj)
+    obj <- FindNeighbors(obj, dims = 1:10)
+    obj <- FindClusters(obj, resolution = 0.5)
+
+    sc.markers <- FindAllMarkers(
+      obj, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.25
+    )
+    sc.markers <- na.omit(sc.markers)
+
+    sc_genes <- sc.markers %>%
+      arrange(p_val_adj, desc(avg_log2FC)) %>%
+      head(n_sc_de) %>%
+      pull(gene)
+
+    genes <- union(genes, as.character(unique(sc_genes)))
+  }
+
+  # whether to add individual gene list
+  if (!is.null(add_genes)) {
+    add_genes <- as.character(add_genes)
+    genes <- union(genes, intersect(add_genes, rownames(patdata)))
+  }
+
+  return(as.character(genes))
 }
+
+DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL, n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05) {
+
+  # common genes
+  common_genes <- rownames(patdata)
+  if (!is.list(scst_list)) {
+    scst_list <- list(scst_list)
+  }
+  for (i in seq_along(scst_list)) {
+    common_genes <- intersect(common_genes, rownames(scst_list[[i]]))
+  }
+
+  patdata <- patdata[common_genes, , drop = FALSE]
+  scst_list <- lapply(scst_list, function(x) x[common_genes, , drop = FALSE])
+
+  # Gene selection
+  gene_list <- select_genes(
+    scdata      = scst_list[[1]],
+    sclab       = sclab,
+    patdata     = patdata,
+    phenotype   = phenotype,
+    add_genes   = add_genes,
+    bulk_hvg    = bulk_hvg,
+    bulk_de     = bulk_de,
+    sc_de       = sc_de,
+    n_hvg       = n_hvg,
+    n_bulk_de   = n_bulk_de,
+    n_sc_de     = n_sc_de,
+    padj.thresh = padj.thresh
+  )
+
+  # Normalization
+  norm_out <- normalize_counts_with_selected_genes(
+    bulk_dataset = patdata,
+    scst_list    = scst_list,
+    gene_list    = gene_list
+  )
+
+  return(list(
+    patDat    = norm_out$patDat,
+    phenotype = phenotype,
+    scstDat   = norm_out$scstDat,
+    scstName  = norm_out$scstName,
+    sclab     = sclab
+  ))
+}
+
+normalize_counts_with_selected_genes <- function(bulk_dataset, scst_list, gene_list) {
+  # normalize bulk
+  bulk_dataset <- bulk_dataset[gene_list, , drop = FALSE]
+  patDat <- preprocessCounts(bulk_dataset)
+
+  scst_expr_mat <- NULL
+  scst_names <- c()
+
+  # SC/ST datasets
+  if (!is.list(scst_list)) {
+    scst_list <- list(scst_list)
+  }
+
+  for (i in seq_along(scst_list)) {
+    st_counts <- scst_list[[i]][gene_list, , drop = FALSE]
+    st_counts <- preprocessCounts(as.matrix(st_counts))
+
+    scst_expr_mat <- cbind(scst_expr_mat, st_counts)
+    scst_names <- c(scst_names, rep(paste0("Dataset", i), ncol(st_counts)))
+  }
+
+  return(list(
+    patDat   = patDat,
+    scstDat  = scst_expr_mat,
+    scstName = scst_names
+  ))
+}
+

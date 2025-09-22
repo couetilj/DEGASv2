@@ -1,21 +1,19 @@
-run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
+run_DEGAS_SCST <- function(DEGAS_data_file, model_type, data_name, loss_type, transfer_type, model_save_dir,
                            lambda1 = 1.0, lambda2 = 3.0, lambda3 = 3.0, tot_seeds = 10, tot_iters = 300, extract_embs = FALSE, random_feat = FALSE, random_perc = 0.8, early_stopping = FALSE) {
   # load required packages
   numpy <- import("numpy")
   DEGAS_python <- import("DEGAS_python")
 
-  st_expr_mat <- data_list$scstDat
-  patDat      <- data_list$patDat
-  phenotype   <- data_list$phenotype
-  st_lab_mat <- data_list$sclab
+  # load the DEGAS preprocessed data
+  load(DEGAS_data_file)
 
   # transform data input numpy array format
   st_expr_mat <- numpy$array(r_to_py(st_expr_mat))
   st_lab_mat <- numpy$array(r_to_py(st_lab_mat))
-  pat_expr_mat <- numpy$array(r_to_py(patDat))
 
+  pat_expr_mat <- numpy$array(r_to_py(patDat))
   if (grepl("Cox", model_type) | grepl("BCE", model_type)) {
-    if (length(unique(phenotype[,1])) == 2) {
+    if (length(unique(phenotype[,1]) == 2)) {
       phenotype <- phenotype[, c(2, 1)]
     }
   }
@@ -57,9 +55,33 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
   degas_results <- DEGAS_python$bagging_all_results(opt, pat_expr_mat, pat_lab_mat, st_expr_mat, sc_lab_mat = st_lab_mat)
 
   # Join the results with meta information
-  degas_results <- cbind(degas_results, st_lab_mat)
+  degas_results <- cbind(degas_results, st_meta_mat, st_index_mat)
+  degas_results_list <- list()
 
-  return(degas_results)
+  if ("x" %in% colnames(st_meta_mat)) { # visualization for ST data
+    for (i in unique(st_index_mat)) {
+      degas_slide_results <- degas_results[degas_results$st_index_mat == i, ]
+      degas_slide_results <- degas_slide_results[, c("cell", "x", "y", "hazard")]
+      write.csv2(degas_slide_results, paste0(model_save_dir, "/", st_names_list[i + 1], ".csv"))
+      degas_results_list <- append(degas_results_list, list(st_name = st_names_list[i + 1], hazard_df = degas_slide_results))
+      # Visualize the results
+      p <- ggplot(degas_slide_results, aes(x = x, y = y, color = hazard)) +
+        geom_point() +
+        scale_color_gradient(low = "gray", high = "darkred", limits = c(0.0, 1.0)) +
+        labs(title = st_names_list[i+1])
+
+      ggsave(filename = paste0(model_save_dir, "/", st_names_list[i+1], ".pdf"), plot = p)
+    }
+  } else {
+    for (i in unique(st_index_mat)) {
+      degas_sub_results <- degas_results[degas_results$st_index_mat == i, ]
+      degas_sub_results <- degas_sub_results[, -ncol(degas_sub_results)]
+      write.csv2(degas_sub_results, paste0(model_save_dir, "/", st_names_list[i + 1], ".csv"))
+      degas_results_list <- append(degas_results_list, list(st_name = st_names_list[i + 1], hazard_df = degas_sub_results))
+    }
+  }
+
+  return(degas_results_list)
 }
 
 plot_hidden_feat <- function(folder_path, phenotype, random_seed = 0, fold = -1, epoch_from = 50, epoch_to = 300, epoch_by = 50, dis_label = "AD", NC_label = "NC") {
