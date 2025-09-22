@@ -170,6 +170,12 @@ DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bul
     gene_list    = gene_list
   )
 
+  if (model_type != "survival") {
+    phenotype <- as.factor(phenotype)
+    phenotype <- as.integer(phenotype) - 1
+  }
+  cat("Phenotype cleaned: ", unique(phenotype), "\n")
+
   return(list(
     patDat    = norm_out$patDat,
     phenotype = phenotype,

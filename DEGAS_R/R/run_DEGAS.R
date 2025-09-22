@@ -1,4 +1,4 @@
-run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
+run_DEGAS_SCST1 <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
                            lambda1 = 1.0, lambda2 = 3.0, lambda3 = 3.0, tot_seeds = 10, tot_iters = 300, extract_embs = FALSE, random_feat = FALSE, random_perc = 0.8, early_stopping = FALSE) {
   # load required packages
   numpy <- import("numpy")
@@ -7,7 +7,7 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
   st_expr_mat <- data_list$scstDat
   patDat      <- data_list$patDat
   phenotype   <- data_list$phenotype
-  st_lab_mat <- data_list$sclab
+  st_lab_mat  <- data_list$sclab
 
   # transform data input numpy array format
   st_expr_mat <- numpy$array(r_to_py(st_expr_mat))
@@ -19,6 +19,7 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
       phenotype <- phenotype[, c(2, 1)]
     }
   }
+
   pat_lab_mat <- numpy$array(r_to_py(phenotype))
 
   if (model_type == "BlankClass") {
