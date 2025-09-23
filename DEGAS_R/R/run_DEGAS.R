@@ -1,4 +1,4 @@
-run_DEGAS_SCST1 <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
+run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
                            lambda1 = 1.0, lambda2 = 3.0, lambda3 = 3.0, tot_seeds = 10, tot_iters = 300, extract_embs = FALSE, random_feat = FALSE, random_perc = 0.8, early_stopping = FALSE) {
   # load required packages
   numpy <- import("numpy")
