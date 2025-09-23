@@ -1,4 +1,4 @@
-run_DEGAS_SCST1 <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
+run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer_type, model_save_dir,
                            lambda1 = 1.0, lambda2 = 3.0, lambda3 = 3.0, tot_seeds = 10, tot_iters = 300, extract_embs = FALSE, random_feat = FALSE, random_perc = 0.8, early_stopping = FALSE) {
   # load required packages
   numpy <- import("numpy")
@@ -11,7 +11,8 @@ run_DEGAS_SCST1 <- function(data_list, model_type, data_name, loss_type, transfe
 
   # transform data input numpy array format
   st_expr_mat <- numpy$array(r_to_py(st_expr_mat))
-  st_lab_mat <- numpy$array(r_to_py(st_lab_mat))
+  st_lab_vec <- as.integer(factor(data$sclab$oupSample.cellType)) - 1
+  st_lab_mat <- numpy$array(r_to_py(st_lab_vec))
   pat_expr_mat <- numpy$array(r_to_py(patDat))
 
   if (grepl("Cox", model_type) | grepl("BCE", model_type)) {
@@ -49,10 +50,18 @@ run_DEGAS_SCST1 <- function(data_list, model_type, data_name, loss_type, transfe
   opt$random_perc <- random_perc
   opt$early_stopping <- early_stopping
   opt$high_reso_output_shape <- n_st_classes
+  opt$low_reso_output_shape <- length(unique(as.vector(phenotype)))
 
   if (!file.exists(model_save_dir)) {
     dir.create(model_save_dir)
   }
+  cat("unique patient labels:", sort(unique(as.vector(phenotype))), "\n")
+  cat("range patient labels:", range(as.vector(phenotype)), "\n")
+
+  cat("unique sc labels:", sort(unique(st_lab_vec)), "\n")
+  cat("range sc labels:", range(st_lab_vec), "\n")
+  cat("n_st_classes:", n_st_classes, "\n")
+
 
   # Run the model
   degas_results <- DEGAS_python$bagging_all_results(opt, pat_expr_mat, pat_lab_mat, st_expr_mat, sc_lab_mat = st_lab_mat)

@@ -128,7 +128,11 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
   return(as.character(genes))
 }
 
-DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL, n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category") {
+DEGAS_preprocessing <- function(
+    scst_list, patdata, phenotype, sclab = NULL,
+    bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL,
+    n_hvg = 250, n_bulk_de = 250, n_sc_de = 200,
+    padj.thresh = 0.05, model_type = "category") {
 
   # common genes
   common_genes <- rownames(patdata)
@@ -146,8 +150,8 @@ DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bul
     x[common_genes, , drop = FALSE]
   })
 
-
   # Gene selection
+
   gene_list <- select_genes(
     scdata      = scst_list[[1]],
     sclab       = sclab,
@@ -170,11 +174,17 @@ DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bul
     gene_list    = gene_list
   )
 
+  # clean phenotype
   if (model_type != "survival") {
     phenotype <- as.factor(phenotype)
     phenotype <- as.integer(phenotype) - 1
   }
-  cat("Phenotype cleaned: ", unique(phenotype), "\n")
+  cat("Phenotype: ", unique(phenotype), "\n")
+
+  if (!is.null(sclab)) {
+    sclab <- as.integer(as.factor(sclab)) - 1
+    cat("sclab: ", unique(sclab), "\n")
+  }
 
   return(list(
     patDat    = norm_out$patDat,
@@ -184,6 +194,8 @@ DEGAS_preprocessing <- function(scst_list, patdata, phenotype, sclab = NULL, bul
     sclab     = sclab
   ))
 }
+
+
 
 normalize_counts_with_selected_genes <- function(bulk_dataset, scst_list, gene_list) {
   # normalize bulk
