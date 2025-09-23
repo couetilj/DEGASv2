@@ -5,7 +5,7 @@
 ### R
 ```R
 install.packages("devtools")
-devtools::install_github("ElliotLiu1997/DEGASv2/DEGAS_R")
+devtools::install_github("ElliotLiu1997/DEGASv2", subdir = "DEGAS_R")
 ```
 
 ### Python
