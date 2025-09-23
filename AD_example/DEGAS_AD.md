@@ -1,6 +1,9 @@
 ---
 title: "DEGASv2 AD Example"
-output: github_document
+output:
+  md_document:
+    variant: markdown_github
+    preserve_yaml: false
 ---
 
 
@@ -155,13 +158,7 @@ umap_fig <- ggplot(hazard_df, aes(x = UMAP_1, y = UMAP_2, color = hazard, shape 
 ggsave("figures/boxplot.png", boxplot_fig, width = 7, height = 5, dpi = 300)
 ggsave("figures/umap.png", umap_fig, width = 7, height = 5, dpi = 300)
 
-print(boxplot_fig)
 ```
 
-![plot of chunk unnamed-chunk-7](figure/unnamed-chunk-7-1.png)
-
-``` r
-print(umap_fig)
-```
-
-![plot of chunk unnamed-chunk-7](figure/unnamed-chunk-7-2.png)
+![](figures/boxplot.png)
+![](figures/umap.png)

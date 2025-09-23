@@ -1,6 +1,9 @@
 ---
 title: "DEGASv2 AD Example"
-output: github_document
+output:
+  md_document:
+    variant: markdown_github
+    preserve_yaml: false
 ---
 
 ```{r setup, include=FALSE}
