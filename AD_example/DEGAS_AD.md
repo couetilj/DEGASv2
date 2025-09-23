@@ -1,10 +1,4 @@
----
-title: "DEGASv2 AD Example"
-output:
-  md_document:
-    variant: markdown_github
-    preserve_yaml: false
----
+
 
 
 
