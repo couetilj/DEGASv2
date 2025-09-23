@@ -6,6 +6,10 @@ output:
     preserve_yaml: false
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/N/project/ADNDD/Foundation/DEGAS_torch/AD_example")
+```
+
 ```{r, include=FALSE}
 .libPaths("/geode2/home/u040/jl370/Carbonate/R_libs")
 Sys.setenv(LD_LIBRARY_PATH = "/N/soft/rhel8/deeplearning/Python-3.10.10/lib:$LD_LIBRARY_PATH")
@@ -13,7 +17,6 @@ library("reticulate")
 use_python("/N/soft/rhel8/deeplearning/Python-3.10.10/python", required = TRUE)
 py_config()
 DEGAS_python <- import("DEGAS_python")
-setwd("/N/project/ADNDD/Foundation/DEGAS_torch/AD_example")
 ```
 
 # Load required packages
@@ -43,112 +46,74 @@ scMeta <- read.csv("scLab.csv", header = TRUE, row.names = 1, sep = ",")
 
 # Load the patient data
 
-```{r}
+```{r, message=FALSE, warning=FALSE, results='hide'}
 bulk_dataset <- read.csv("patDat.csv", header = TRUE, row.names = 1)
 patMeta <- read.csv("patLab.csv", header = TRUE, row.names = 1)
-phenotype_df <- data.frame(CERAD = as.integer(patMeta$CERAD), 
-                        Braak = as.integer(patMeta$Braak),
-                        CDR = as.integer(patMeta$CDR))
+phenotype_df <- data.frame(CERAD = as.integer(patMeta$CERAD <= 2), 
+                        Braak = as.integer(patMeta$Braak >= 5),
+                        CDR = as.integer(patMeta$CDR) >= 3)
 ```
 
 # Preprocessing data
+
 ```{r, message=FALSE, warning=FALSE, results='hide'}
 # sc data only
 umap_df <- umap_coordinate(sc_raw_data, scMeta)
 # use CERAD for test
 label = "CERAD"
-data <- DEGAS_preprocessing(scst_list = sc_raw_data, sclab = scMeta, patdata   = bulk_dataset, phenotype = phenotype_df[[label]], bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL)
+data <- DEGAS_preprocessing(scst_list = sc_raw_data, sclab = scMeta$cellType, patdata = bulk_dataset, phenotype = phenotype_df[[label]], bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL)
 ```
 
-# Run model for different criterions
+# Run DEGAS model
+
 ```{r, message=FALSE, warning=FALSE}
-n_st_classes = length(unique(sc_dataset$oupSample.cellType))
+n_st_classes = length(unique(scMeta$cellType))
 
-degas_sc_results <- run_DEGAS_SCST(data_list= data_list, model_type = "ClassClass",data_name = "Grubman_MSBB", loss_type = "cross_entropy", transfer_type  = "Wasserstein", model_save_dir = ".", tot_seeds = 10
-)
-
-hazard_df <- as.data.frame(degas_sc_results)[, c("hazard_df.oupSample.cellType", "hazard_df.hazard", "hazard_df.oupSample.batchCond")]
-colnames(hazard_df) <- c("cellType", "hazard", "batchCond")
+# Run DEGAS model
+degas_sc_results <- run_DEGAS_SCST(data_list= data, model_type = "ClassClass",data_name = "Grubman_MSBB", loss_type = "cross_entropy", transfer_type  = "Wasserstein", model_save_dir = ".", tot_seeds = 10)
+hazard_df <- cbind(as.data.frame(degas_sc_results), scMeta, umap_df)
 hazard_df <- hazard_df %>% mutate(batchCond = ifelse(batchCond == "AD", "AD", ifelse(batchCond == "ct", "NC", batchCond)))
-write.csv(hazard_df, file.path(folder_path, "results.csv"), row.names = FALSE)
+write.csv(hazard_df, "results.csv", row.names = FALSE)
 ```
 
 # Visualize the Result
 
 ```{r}
-plot_result <- function(hazard_df, sc_dataset) {
+boxplot_fig <- ggplot(hazard_df, aes(x = batchCond, y = hazard, fill = batchCond)) + 
+  geom_boxplot(position = position_dodge(), width = 0.6, outlier.shape = NA) + 
+  scale_fill_manual(values = c("AD" = "#D73027", "NC" = "#4575B4")) +
+  ylim(0, 1.2) +
+  facet_wrap(~cellType, nrow = 2) +
+  labs(
+    title = "DEGAS Hazard Score by Cell Type",
+    x = "Batch Condition",
+    y = "Hazard Score",
+    fill = "Condition"
+  ) +
+  theme_minimal(base_size = 14)
 
-  # Boxplot
-  ggplot1 <- ggplot(hazard_df, aes(x = batchCond, y = hazard, fill = batchCond)) + 
-    geom_boxplot(position = position_dodge(), width = 0.6, outlier.shape = NA) + 
-    scale_fill_manual(values = c("AD" = "#D73027", "NC" = "#4575B4")) +
-    ylim(0, 1.2) +
-    facet_wrap(~cellType, nrow = 2) +
-    labs(
-      title = "DEGAS Hazard Score by Cell Type",
-      x = "Batch Condition",
-      y = "Hazard Score",
-      fill = "Condition"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
-      axis.title = element_text(face = "bold", size = 13),
-      axis.text = element_text(size = 11),
-      strip.text = element_text(face = "bold"),
-      legend.title = element_text(face = "bold"),
-      legend.text = element_text(size = 11)
-    )
+umap_fig <- ggplot(hazard_df, aes(x = UMAP_1, y = UMAP_2, color = hazard, shape = cellType)) +
+  geom_point(size = 1.4) +
+  scale_color_gradient2(
+    low = "#000000", mid = "#999999", high = "#D73027", midpoint = 0.5,
+    limits = c(0, 1), name = "Hazard"
+  ) +
+  labs(
+    title = "UMAP Colored by DEGAS Hazard",
+    x = "UMAP 1",
+    y = "UMAP 2",
+    shape = "Cell Type"
+  ) +
+  theme_minimal(base_size = 14)
 
-  # UMAP
-  umap_data <- Embeddings(sc_dataset, reduction = "umap")
-  umap_df <- as.data.frame(umap_data)
-  colnames(umap_df) <- c("UMAP_1", "UMAP_2")
-  umap_df$cell <- rownames(umap_df)
+ggsave("figures/boxplot.png", boxplot_fig, width = 7, height = 5, dpi = 300)
+ggsave("figures/umap.png", umap_fig, width = 7, height = 5, dpi = 300)
 
-  hazard_df$cell <- rownames(hazard_df)
-  umap_merged <- left_join(
-    umap_df, 
-    hazard_df[, c("cell", "hazard", "cellType")], 
-    by = "cell"
-  )
-
-  ggplot2 <- ggplot(umap_merged, aes(x = UMAP_1, y = UMAP_2, color = hazard, shape = cellType)) +
-    geom_point(size = 1.4) +
-    scale_color_gradient2(
-      low = "#000000", mid = "#999999", high = "#D73027", midpoint = 0.5,
-      limits = c(0, 1), name = "Hazard"
-    ) +
-    labs(
-      title = "UMAP Colored by DEGAS Hazard",
-      x = "UMAP 1",
-      y = "UMAP 2",
-      shape = "Cell Type"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
-      axis.title = element_text(face = "bold", size = 13),
-      axis.text = element_text(size = 11),
-      legend.title = element_text(face = "bold"),
-      legend.text = element_text(size = 11)
-    )
-
-  list(boxplot = ggplot1, umap = ggplot2)
-}
-```
-
-```{r}
-CREAD_result <- read.csv("DEGASCERAD_Pat_Diff_2025-04-25/results.csv", row.names = 1)
-plot_list <- plot_result(CREAD_result, sc_dataset)
-
-ggsave("figures/boxplot.png", plot_list$boxplot, width = 7, height = 5, dpi = 300)
-ggsave("figures/umap.png", plot_list$umap, width = 7, height = 5, dpi = 300)
-
-pdf("box.pdf")
-print(plot_list$boxplot)
+pdf("box.pdf", width = 7, height = 5)
+print(boxplot_fig)
 dev.off()
-pdf("umap.pdf")
-print(plot_list$umap)
+
+pdf("umap.pdf", width = 7, height = 5)
+print(umap_fig)
 dev.off()
 ```
