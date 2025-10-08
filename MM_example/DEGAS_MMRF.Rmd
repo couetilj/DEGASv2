@@ -1,0 +1,131 @@
+---
+title: "DEGASv2 MMRF Example"
+output:
+  md_document:
+    variant: markdown_github
+    preserve_yaml: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "/N/project/ADNDD/Foundation/DEGAS_torch/MM_example")
+```
+
+```{r, include=FALSE}
+.libPaths("/geode2/home/u040/jl370/Carbonate/R_libs")
+Sys.setenv(LD_LIBRARY_PATH = "/N/soft/rhel8/deeplearning/Python-3.10.10/lib:$LD_LIBRARY_PATH")
+library("reticulate")
+use_python("/N/soft/rhel8/deeplearning/Python-3.10.10/python", required = TRUE)
+py_config()
+DEGAS_python <- import("DEGAS_python")
+```
+
+# Load required packages
+
+```{r, message=FALSE, warning=FALSE}
+library(ggrepel)
+library(dplyr)
+library(magrittr)
+library(Seurat)
+library(ggplot2)
+library(stringr)
+library(DESeq2)
+library(DEGASv2)
+library(ggpubr)
+library(Matrix)
+
+```
+
+# Load the scRNA-seq data
+
+```{r}
+sc_raw_data <- read.csv("scDat.csv", header = TRUE, row.names = 1, sep = ",")
+scMeta <- read.csv("scLab.csv", header = TRUE, row.names = 1, sep = ",")
+```
+
+# Load the patient data
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+bulk_dataset <- read.csv("patDat.csv", header = TRUE, row.names = 1)
+patMeta <- read.csv("patLab.csv", header = TRUE, row.names = 1)
+```
+
+# Preprocessing data
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# sc data only
+umap_df <- umap_coordinate(sc_raw_data, scMeta, dims = 1:5, resolution = 0.3)
+# use CERAD for test
+label = "responder"
+data <- DEGAS_preprocessing(scst_list = sc_raw_data, sclab = scMeta$seurat_clusters, patdata = bulk_dataset, phenotype = patMeta[[label]], bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL)
+```
+
+# Run DEGAS model
+
+```{r, message=FALSE, warning=FALSE}
+n_st_classes = length(unique(scMeta$seurat_clusters))
+
+# Run DEGAS model
+degas_sc_results <- run_DEGAS_SCST(data_list= data, model_type = "ClassClass",data_name = "MMRF", loss_type = "cross_entropy", transfer_type  = "Wasserstein", model_save_dir = ".", tot_seeds = 10)
+
+hazard_df <- cbind(as.data.frame(degas_sc_results), scMeta, umap_df)
+write.csv(hazard_df, "results.csv", row.names = FALSE)
+```
+
+# Visualize the Result
+
+```{r}
+boxplot_fig <- ggplot(hazard_df, aes(x = as.factor(seurat_clusters), y = hazard)) + 
+  geom_boxplot(fill = "#4575B4", color = "black", width = 0.6, outlier.shape = NA) +
+  ylim(0, 1.05) +
+  labs(
+    title = "DEGAS Hazard Score by Clusters",
+    x = "Seurat Cluster",
+    y = "Hazard Score"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+cluster_centers <- hazard_df %>%
+  group_by(seurat_clusters) %>%
+  summarise(
+    UMAP_1 = median(UMAP_1, na.rm = TRUE),
+    UMAP_2 = median(UMAP_2, na.rm = TRUE)
+  )
+
+umap_fig <- ggplot(hazard_df, aes(x = UMAP_1, y = UMAP_2, color = hazard)) +
+  geom_point(size = 0.8, alpha = 0.8) +  
+  scale_color_gradient2(
+    low = "#000000", mid = "#999999", high = "#D73027",
+    midpoint = 0.5, limits = c(0, 1), name = "Hazard"
+  ) +
+
+  geom_text_repel(
+    data = cluster_centers,
+    aes(label = seurat_clusters),
+    color = "black",
+    size = 4,
+    fontface = "bold",
+    box.padding = 0.4,
+    segment.color = "grey50"
+  ) +
+  labs(
+    title = "UMAP Colored by DEGAS Hazard",
+    x = "UMAP 1",
+    y = "UMAP 2"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right"
+  )
+
+
+ggsave("figures/boxplot.png", boxplot_fig, width = 7, height = 5, dpi = 300)
+ggsave("figures/umap.png", umap_fig, width = 7, height = 5, dpi = 300)
+
+print(boxplot_fig)
+print(umap_fig)
+```
