@@ -1,0 +1,7 @@
+exportPattern("^[[:alpha:]]+")
+import(dplyr)
+import(magrittr)
+import(Seurat)
+import(ggplot2)
+import(stringr)
+import(DESeq2)
