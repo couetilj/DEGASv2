@@ -20,6 +20,9 @@ install.packages("devtools")
 devtools::install_github("ElliotLiu1997/DEGASv2", subdir = "DEGAS_R")
 ```
 
+&#9888;&#65039; Note: The folder `DEGAS_R_old` contains archived code for internal reference only.  
+Do **NOT** install from that folder.
+
 ### Python
 ```bash
 pip install git+https://github.com/ElliotLiu1997/DEGASv2.git#subdirectory=DEGAS_python
