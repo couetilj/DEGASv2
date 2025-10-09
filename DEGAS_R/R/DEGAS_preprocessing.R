@@ -180,7 +180,6 @@ DEGAS_preprocessing <- function(
     phenotype <- as.factor(phenotype)
     phenotype <- as.integer(phenotype) - 1
   }
-  cat("Phenotype: ", unique(phenotype), "\n")
 
   if (!is.null(sclab)) {
     sclab <- as.integer(as.factor(sclab)) - 1
