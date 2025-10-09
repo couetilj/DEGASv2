@@ -54,11 +54,11 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
   if (!file.exists(model_save_dir)) {
     dir.create(model_save_dir)
   }
-  cat("unique patient labels:", sort(unique(as.vector(phenotype))), "\n")
-  cat("range patient labels:", range(as.vector(phenotype)), "\n")
+#  cat("unique patient labels:", sort(unique(as.vector(phenotype))), "\n")
+#  cat("range patient labels:", range(as.vector(phenotype)), "\n")
 
-  cat("unique sc labels:", sort(unique(st_lab_mat)), "\n")
-  cat("n_st_classes:", n_st_classes, "\n")
+#  cat("unique sc labels:", sort(unique(st_lab_mat)), "\n")
+#  cat("n_st_classes:", n_st_classes, "\n")
 
 
   # Run the model
