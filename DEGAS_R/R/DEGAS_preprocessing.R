@@ -164,7 +164,8 @@ DEGAS_preprocessing <- function(
     n_hvg       = n_hvg,
     n_bulk_de   = n_bulk_de,
     n_sc_de     = n_sc_de,
-    padj.thresh = padj.thresh
+    padj.thresh = padj.thresh,
+    model_type = model_type
   )
 
   # Normalization
