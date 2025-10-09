@@ -138,9 +138,8 @@ p1 <- ggplot(hazard_df2, aes(x = factor(TumorStatus, levels = x_axis_order), y =
   )
 
 ggsave("figures/box_Tumor_vs_NonTumor.png", p1, width = 7, height = 5, dpi = 300)
-![](figures/box_Tumor_vs_NonTumor.png)
-
 ```
+![](figures/box_Tumor_vs_NonTumor.png)
 
 ### 2. Zoom Out Non-Tumor Regions
 
@@ -180,9 +179,8 @@ p2 <- ggplot(hazard_df3, aes(x = factor(Final_Annotations, levels = x_axis_order
   scale_fill_manual(values = colors)
 
 ggsave("figures/box_Hazard_TissueTypes_TumorMerged.png", p2, width = 9, height = 6,dpi = 300)
-![](figures/box_Hazard_TissueTypes_TumorMerged.png)
-
 ```
+![](figures/box_Hazard_TissueTypes_TumorMerged.png)
 
 ### 3. Spatial Visualization
 
@@ -213,6 +211,6 @@ p3 <- ggplot(hazard_df2, aes(x = coord1, y = coord2)) +
   )
 
 ggsave("figures/spatial_hazard.png", p3, width = 6, height = 5, dpi = 300)
-![](figures/spatial_hazard.png)
-
 ```
+
+![](figures/spatial_hazard.png)
