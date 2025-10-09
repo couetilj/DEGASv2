@@ -14,11 +14,14 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
   st_lab_mat <- numpy$array(r_to_py(st_lab_mat))
   pat_expr_mat <- numpy$array(r_to_py(patDat))
 
+
   if (grepl("Cox", model_type) | grepl("BCE", model_type)) {
-    if (length(unique(phenotype[,1])) == 2) {
-      phenotype <- phenotype[, c(2, 1)]
+    phenotype <- as.matrix(phenotype)
+    if (length(unique(phenotype[, 1])) == 2) {
+      phenotype <- phenotype[, c(2, 1), drop = FALSE]
     }
   }
+
 
   pat_lab_mat <- numpy$array(r_to_py(phenotype))
 
@@ -49,11 +52,17 @@ run_DEGAS_SCST <- function(data_list, model_type, data_name, loss_type, transfer
   opt$random_perc <- random_perc
   opt$early_stopping <- early_stopping
   opt$high_reso_output_shape <- n_st_classes
-  opt$low_reso_output_shape <- length(unique(as.vector(phenotype)))
+
+  if (grepl("Cox", model_type) | grepl("BCE", model_type)) {
+    opt$low_reso_output_shape <- 1L
+  } else {
+    opt$low_reso_output_shape <- length(unique(as.vector(phenotype)))
+  }
 
   if (!file.exists(model_save_dir)) {
     dir.create(model_save_dir)
   }
+  
 #  cat("unique patient labels:", sort(unique(as.vector(phenotype))), "\n")
 #  cat("range patient labels:", range(as.vector(phenotype)), "\n")
 
