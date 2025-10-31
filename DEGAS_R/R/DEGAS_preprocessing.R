@@ -14,6 +14,20 @@ preprocessCounts <- function(X){
 }
 
 # Calculate UMAP coordinate
+#' scRNA-seq UMAP calculation
+#'
+#' Using Seurat to calculate UMAP corrdinate for scRNA-seq data for visualization
+#'
+#' @param count A count matrix or data frame with scRNA-seq data (rows = genes, columns = cells).
+#' @param metadata metadata for scRNA-seq, default = NULL
+#' @param min.cells filtering cells, default = 3
+#' @param min.features filtering genes, default = 200.
+#' @param nfeatures The number of high variable genes, default = 2000
+#' @param dims Dimensions of reduction to use as input
+#' @param resolution Value of the resolution parameter, use a value above (below) 1.0 if you want to obtain a larger (smaller) number of communities.
+#'
+#' @return A UMAP coordinate data.frame
+#' @export
 umap_coordinate <- function(count, metadata = NULL, min.cells = 3, min.features = 200, nfeatures = 2000, dims = 1:10, resolution = 0.5) {
 
   obj <- CreateSeuratObject(
@@ -38,6 +52,25 @@ umap_coordinate <- function(count, metadata = NULL, min.cells = 3, min.features 
   return(umap_df)
 }
 
+#' Gene selection for DEGAS preprocessing
+#'
+#' Selects genes from bulk and single-cell data using high variability,
+#' differential expression, or user-defined lists.
+#'
+#' @param scdata A scRNA-seq count matrix (genes × cells).
+#' @param sclab Metadata for single-cell data.
+#' @param patdata Bulk RNA-seq count matrix (genes × samples).
+#' @param phenotype Phenotype vector or data.frame (depends on model_type).
+#' @param add_genes Optional vector of user-specified genes.
+#' @param bulk_hvg Logical. Use bulk HVG selection.
+#' @param bulk_de Logical. Use bulk differential expression.
+#' @param sc_de Logical. Use scRNA-seq differential expression.
+#' @param n_hvg,n_bulk_de,n_sc_de Integers. Numbers of genes to select per method.
+#' @param padj.thresh FDR threshold for DE.
+#' @param model_type "category" or "survival".
+#'
+#' @return Character vector of selected gene names.
+#' @export
 # gene selection
 select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE,
                          n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category") {
@@ -128,6 +161,29 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
   return(as.character(genes))
 }
 
+
+#' DEGAS preprocessing
+#'
+#' Preprocess 4 necessary input data, scData, sclab, Patdata and phenotype with gene selection and normalization.
+#'
+#' @param scst_list Count matrix or data frame with scRNA-seq/spatial transcriptomics data (rows = genes, columns = cells).
+#' @param sclab Metadata for scRNA-seq e.g. cell type, clusters (required), default = NULL
+#' @param patdata Count Bulk RNA-seq data (genes × samples).
+#' @param phenotype A phenotype vector or data frame describing sample labels as disease status.
+#'   If \code{model_type = "category"}, this should be a categorical variable.
+#'   If \code{model_type = "survival"}, it must include \code{time} and \code{status} columns.
+#' @param bulk_hvg Whether user wants to use sample (bulk) level high variable genes as input in DEGAS. Default is \code{TRUE}.
+#' @param bulk_de Whether user wants to use sample (bulk) differential expression genes for phenotype using DEseq2, commonly set Normal or Control as reference. Default is \code{TRUE}.
+#' @param sc_de Whether user wants to use single cell differential expression genes for each cluster. Default is \code{TRUE}.
+#' @param add_genes The user decides whether to add their own gene list by preference. If the user set bulk_hvg, bulk_de and sc_de as FALSE, this gene list is necessary. Default is \code{NULL}.
+#' @param n_hvg Number of bulk high variable genes, default = 250.
+#' @param n_bulk_de Number of bulk differential expression genes for phenotype, default = 250.
+#' @param n_sc_de Number of genes for each single cell clusters, default = 200.
+#' @param padj.thresh Threshold for differential expression analysis, default = 0.05
+#' @param model_type Choose model type (category or survival), default = \code{category}.
+#'
+#' @return A list ready for DEGAS analysis, includes SC/ST RNA-seq data, SC metadata, bulk RNA-seq data, bulk sample phenotype, SC/ST datalist name if multiple datasets.
+#' @export
 DEGAS_preprocessing <- function(
     scst_list, patdata, phenotype, sclab = NULL,
     bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL,
@@ -196,7 +252,32 @@ DEGAS_preprocessing <- function(
 }
 
 
-
+#' Normalization
+#'
+#' This function selects genes from bulk and single-cell/spatial transcriptomics data
+#' using high-variability, differential expression, or user-specified gene lists.
+#'
+#' @param scdata A count matrix or data frame containing single-cell RNA-seq
+#'   expression data (rows = genes, columns = cells).
+#' @param sclab A metadata data frame for the single-cell data (e.g., cluster or cell type labels).
+#' @param patdata A count matrix or data frame containing bulk RNA-seq
+#'   expression data (rows = genes, columns = samples).
+#' @param phenotype A phenotype vector or data frame describing sample labels.
+#'   If \code{model_type = "category"}, this should be a categorical variable.
+#'   If \code{model_type = "survival"}, it must include \code{time} and \code{status} columns.
+#' @param add_genes An optional character vector of user-specified genes to include.
+#' @param bulk_hvg Logical. Whether to select bulk high-variable genes (HVG).
+#'   Default is \code{TRUE}.
+#' @param bulk_de Logical. Whether to include bulk differential expression (DE) genes.
+#'   Default is \code{TRUE}.
+#' @param sc_de Logical. Whether to include single-cell differential expression (DE) genes.
+#'   Default is \code{TRUE}.
+#' @param n_hvg Integer. Number of high-variable bulk genes to select. Default is \code{250}.
+#' @param n_bulk_de Integer. Number of bulk differential expression genes to select. Default is \code{250}.
+#' @param n_sc_de Integer. Number of single-cell differential expression genes to select. Default is \code{200}.
+#' @param padj.thresh Numeric. Adjusted p-value threshold for differential expression filtering. Default is \code{0.05}.
+#' @param model_type Character. Either \code{"category"} or \code{"survival"}. Determines phenotype handling.
+#'
 normalize_counts_with_selected_genes <- function(bulk_dataset, scst_list, gene_list) {
   # normalize bulk
   bulk_dataset <- bulk_dataset[gene_list, , drop = FALSE]
