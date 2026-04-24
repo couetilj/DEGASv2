@@ -59,11 +59,11 @@ results <- DEGAS_python$bagging_all_results(
     sc_lab_mat = NULL
 )
 
-# `results` comes back as a pandas DataFrame proxy (reticulate doesn't
-# auto-convert pandas); pull the two columns of interest as R vectors.
+# reticulate >= 1.40 auto-converts pandas DataFrames to R data.frames;
+# pull the two columns of interest directly.
 risk <- data.frame(
-    index  = as.integer(results$`__getitem__`("index")$to_numpy()),
-    hazard = as.numeric(results$`__getitem__`("hazard")$to_numpy())
+    index  = as.integer(results$index),
+    hazard = as.numeric(results$hazard)
 )
 risk <- risk[order(risk$index), ]
 
