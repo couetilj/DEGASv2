@@ -164,8 +164,8 @@ class BaseModel():
         for name in self.net_name_list:
             net = getattr(self, name)
             if torch.cuda.is_available():
-                torch.save(net.model.cpu().state_dict(), os.path.join(self.save_dir, "{}_net_{}.pth".format(epoch, name)))
-                net.cuda(self.gpu_ids[0]) # later add gpu ids
+                torch.save(net.cpu().state_dict(), os.path.join(self.save_dir, "{}_net_{}.pth".format(epoch, name)))
+                net.cuda(self.gpu_id)
             else:
                 torch.save(net.cpu().state_dict(), os.path.join(self.save_dir, "{}_net_{}.pth".format(epoch, name)))
                 
