@@ -19,10 +19,10 @@ torch.manual_seed(seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 
-def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None, pat_groups = None):
+def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None):
     # define data loaders and model
-    high_reso_loader, low_reso_loader = load_datasets("train", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat, pat_groups)
-    high_reso_eval_loader, low_reso_eval_loader = load_datasets("eval", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat, pat_groups)
+    high_reso_loader, low_reso_loader = load_datasets("train", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
+    high_reso_eval_loader, low_reso_eval_loader = load_datasets("eval", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
 
     # define the model
     first_item = next(iter(low_reso_eval_loader))
@@ -68,7 +68,7 @@ def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc
     return model.save_dir
 
 
-def bagging_all_results(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None, pat_groups = None):
+def bagging_all_results(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None):
     """
     sc_expr_mat: single cell or spatial transcriptomic data gene expression
     sc_loc_mat: spatial transcriptomic data (optional, for graph NN)
@@ -84,9 +84,9 @@ def bagging_all_results(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat 
                 np.random.seed(opt["seed"])
                 num_select_feats = np.floor(pat_expr_mat.shape[1] * opt["random_perc"]).astype(int)
                 select_feats = np.sort(np.random.choice(list(range(pat_expr_mat.shape[1])), num_select_feats, replace = False))
-                save_results_folder = run_model(opt, pat_expr_mat[:, select_feats], pat_lab_mat, sc_expr_mat[:, select_feats], sc_loc_mat, sc_lab_mat, pat_groups)
+                save_results_folder = run_model(opt, pat_expr_mat[:, select_feats], pat_lab_mat, sc_expr_mat[:, select_feats], sc_loc_mat, sc_lab_mat)
             else:
-                save_results_folder = run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat, pat_groups)
+                save_results_folder = run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
     else:
         for fold in range(opt["tot_folds"]):
             opt["fold"] = fold
@@ -97,9 +97,9 @@ def bagging_all_results(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat 
                     np.random.seed(opt["seed"])
                     num_select_feats = np.floor(pat_expr_mat.shape[1] * opt["random_perc"]).astype(int)
                     select_feats = np.sort(np.random.choice(list(range(pat_expr_mat.shape[1])), num_select_feats, replace = False))
-                    save_results_folder = run_model(opt, pat_expr_mat[:, select_feats], pat_lab_mat, sc_expr_mat[:, select_feats], sc_loc_mat, sc_lab_mat, pat_groups)
+                    save_results_folder = run_model(opt, pat_expr_mat[:, select_feats], pat_lab_mat, sc_expr_mat[:, select_feats], sc_loc_mat, sc_lab_mat)
                 else:
-                    save_results_folder = run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat, pat_groups)
+                    save_results_folder = run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
     print("Finish Run and Eval all models")
     print("Aggregate all results")
     # aggregate all results

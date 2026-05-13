@@ -4,11 +4,6 @@ import numpy as np
 import os
 from .tools import *
 
-try:
-    from sklearn.model_selection import GroupKFold
-except ImportError:
-    GroupKFold = None
-
 class STSCDataset(Dataset):
     # load spatial transcriptomics datasets
     # the logic of this Dataset is different from the pytorch
@@ -89,7 +84,7 @@ class STSCDataset(Dataset):
 #####################################################################################
 
 class PatDataset(Dataset):
-    def __init__(self, pat_expr_mat, pat_lab_mat, random_seed = 0, batch_size = 200, tot_iters = 300, phase = "train", model_type = "phenotype", sample_method = "balance", fold = 0, tot_folds = 1, groups = None):
+    def __init__(self, pat_expr_mat, pat_lab_mat, random_seed = 0, batch_size = 200, tot_iters = 300, phase = "train", model_type = "phenotype", sample_method = "balance"):
         super(PatDataset, self).__init__()
         assert phase in ["train", "eval", "eval_all"]
 
@@ -113,40 +108,7 @@ class PatDataset(Dataset):
         self.phase = phase
         self.model_type = model_type
         self.sample_method = sample_method
-        self.fold = fold
-        self.tot_folds = tot_folds
-        self.groups = groups
-
-        # Optional patient-grouped fold subsampling for the bulk side.
-        # When groups is provided AND tot_folds > 1, this dataset is restricted
-        # to one GroupKFold slice — so matched T+N aliquots from the same
-        # patient land in the same fold. Without groups, every fold sees the
-        # full bulk training set (original DEGAS behavior — backward compat).
-        self.fold_indices = None
-        if groups is not None and self.fold >= 0 and self.phase == "train" and self.tot_folds > 1:
-            if GroupKFold is None:
-                raise ImportError("groups requires scikit-learn (GroupKFold)")
-            groups_arr = np.asarray(groups)
-            if len(groups_arr) != self.n_samples:
-                raise ValueError(
-                    f"groups length {len(groups_arr)} != n_samples {self.n_samples}"
-                )
-            n_unique = len(np.unique(groups_arr))
-            if n_unique < self.tot_folds:
-                raise ValueError(
-                    f"GroupKFold needs at least tot_folds={self.tot_folds} groups, "
-                    f"got {n_unique}"
-                )
-            gkf = GroupKFold(n_splits=self.tot_folds)
-            # Use a label vector for the y arg — for Cox model it is the status column
-            if ("Cox" in self.model_type):
-                y_for_split = self.status
-            else:
-                y_for_split = self.patLab
-            splits = list(gkf.split(np.zeros((self.n_samples, 1)),
-                                     y=y_for_split, groups=groups_arr))
-            _, fold_indices = splits[fold]
-            self.fold_indices = np.asarray(fold_indices)
+    
 
 
     def __len__(self):
@@ -157,20 +119,11 @@ class PatDataset(Dataset):
 
     def get(self, index):
         assert self.phase == "train"
-        # If patient-grouped subsampling is active, draw only from this fold's
-        # patient pool. Otherwise, use the full bulk training set (original
-        # DEGAS behavior).
-        active_pool = self.fold_indices if self.fold_indices is not None else self.pat_idx
         if ("Cox" in self.model_type):
             np.random.seed(self.random_seed + index)
-            self.idx_select = np.random.choice(active_pool, self.batch_size, replace = False)
+            self.idx_select = np.random.choice(self.pat_idx, self.batch_size, replace = False)
         elif (self.sample_method == "balance") and ("Cox" not in self.model_type):
-            if self.fold_indices is not None:
-                sub_lab = self.patLab[self.fold_indices]
-                sub_idx = balance_sampling(sub_lab, self.batch_size, self.random_seed + index)
-                self.idx_select = self.fold_indices[sub_idx]
-            else:
-                self.idx_select = balance_sampling(self.patLab, self.batch_size, self.random_seed + index)
+            self.idx_select = balance_sampling(self.patLab, self.batch_size, self.random_seed + index)
         else:
             raise ValueError("Other sampling method is not implemented yet!")
 
