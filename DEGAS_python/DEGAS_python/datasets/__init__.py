@@ -3,14 +3,21 @@ from .dataset import *
 # from torch_geometric.loader import DataLoader as GDataLoader
 from torch.utils.data import DataLoader
 
-def load_datasets(phase, opt, pat_expr_mat, pat_lab_mat, st_expr_mat, st_loc_mat = None, sc_lab_mat = None):
+def load_datasets(phase, opt, pat_expr_mat, pat_lab_mat, st_expr_mat, st_loc_mat = None, sc_lab_mat = None, sc_groups = None):
+    """Build the high-resolution (SC/ST) and low-resolution (patient) DataLoaders.
+
+    sc_groups : np.ndarray | None
+        Per-cell/spot group label (e.g. patient barcode). When provided and
+        tot_folds > 1, the SC/ST fold split uses GroupKFold so no group spans
+        multiple folds. None preserves the original random-shuffle behavior.
+    """
     bs = 1 if phase == "train" else opt["batch_size"]
     # load single cell or st dataset
     if opt["graph_type"] is None:
         high_reso_dataset = DataLoader(STSCDataset(st_expr_mat, sc_lab_mat,
-            random_seed = opt["seed"], fold = opt["fold"], tot_folds = opt["tot_folds"], tot_iters = opt["tot_iters"], batch_size = opt["batch_size"], phase = phase, sample_method = opt["sample_method"]),
+            random_seed = opt["seed"], fold = opt["fold"], tot_folds = opt["tot_folds"], tot_iters = opt["tot_iters"], batch_size = opt["batch_size"], phase = phase, sample_method = opt["sample_method"], groups = sc_groups),
             batch_size = bs, shuffle = False)
-        low_reso_dataset = DataLoader(PatDataset(pat_expr_mat, pat_lab_mat, random_seed = opt["seed"], batch_size = opt["pat_batch_size"], 
+        low_reso_dataset = DataLoader(PatDataset(pat_expr_mat, pat_lab_mat, random_seed = opt["seed"], batch_size = opt["pat_batch_size"],
             tot_iters = opt["tot_iters"], phase = phase, model_type = opt["model_type"], sample_method = opt["sample_method"]),
             batch_size = bs, shuffle = False)
     else:
@@ -18,5 +25,3 @@ def load_datasets(phase, opt, pat_expr_mat, pat_lab_mat, st_expr_mat, st_loc_mat
         pass
 
     return high_reso_dataset, low_reso_dataset
-
-

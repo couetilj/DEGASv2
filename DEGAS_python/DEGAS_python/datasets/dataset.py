@@ -4,28 +4,34 @@ import numpy as np
 import os
 from .tools import *
 
+try:
+    from sklearn.model_selection import GroupKFold
+except ImportError:
+    GroupKFold = None
+
+
 class STSCDataset(Dataset):
     # load spatial transcriptomics datasets
     # the logic of this Dataset is different from the pytorch
     # in this STDataset, each batch samples is saved as a single sample in pytorch Dataset
     # which means, each sample is batch_size X feature_dim
-    def __init__(self, st_expr_mat, sc_lab_mat = None, 
-                random_seed = 0, fold = 0, tot_folds = 1, tot_iters = 300, batch_size = 200, phase = "train", sample_method = "balance"):
+    def __init__(self, st_expr_mat, sc_lab_mat = None,
+                random_seed = 0, fold = 0, tot_folds = 1, tot_iters = 300, batch_size = 200,
+                phase = "train", sample_method = "balance", groups = None):
         """
         random_seed (int): random seed for shuffling the dataset
         sample_method: which method to sample
         tot_iters: total number of training iteration
         batch_size (int): batch size
-        phase (string): should be "train" or "eval".
+        phase (string): should be 'train' or 'eval'.
+        groups (np.ndarray | None): optional per-sample group identifier (e.g. patient
+            barcode). When provided and tot_folds > 1, fold splits use
+            sklearn.GroupKFold so that no single group spans two folds — required to
+            avoid intra-patient data leakage in scRNA-seq / spatial data.
         """
         super(STSCDataset, self).__init__()
         assert phase in ["train", "eval", "eval_all"]
         self.n_samples = st_expr_mat.shape[0]
-        # if st_loc_mat is not None:
-        #     assert self.n_samples == st_loc_mat.shape[0]
-        #     self.stLoc = st_loc_mat
-        # else:
-        #     self.stLoc = np.zeros((self.n_samples, 2)) # dummy value
         if sc_lab_mat is not None:
             if len(sc_lab_mat.shape) > 1:
                 if sc_lab_mat.shape[1] > 1:
@@ -46,14 +52,39 @@ class STSCDataset(Dataset):
         self.tot_folds = tot_folds
         self.sample_method  = sample_method
         self.batch_size = batch_size
+        self.groups = groups
 
         # ZL: add Nov, 21st, for multiple folds
         if self.fold >= 0 and self.phase == "train" and self.tot_folds > 1:
-            # split the dataset into different folds
-            np.random.seed(0)
-            indices = np.random.choice(range(self.n_samples), self.n_samples, replace = False)
-            fold_size = self.n_samples // self.tot_folds
-            self.fold_indices = indices[fold * fold_size : (fold + 1) * fold_size]
+            if groups is not None:
+                # Patient-grouped split — each group ends up entirely in one fold.
+                # Use GroupKFold's test_idx as the fold's training subset, matching
+                # the existing semantics ('each fold gets its own slice of the data,
+                # disjoint from other folds').
+                if GroupKFold is None:
+                    raise ImportError("groups requires scikit-learn (GroupKFold)")
+                groups_arr = np.asarray(groups)
+                if len(groups_arr) != self.n_samples:
+                    raise ValueError(
+                        f"groups length {len(groups_arr)} != n_samples {self.n_samples}"
+                    )
+                n_unique = len(np.unique(groups_arr))
+                if n_unique < self.tot_folds:
+                    raise ValueError(
+                        f"GroupKFold needs at least tot_folds={self.tot_folds} groups, "
+                        f"got {n_unique}"
+                    )
+                gkf = GroupKFold(n_splits=self.tot_folds)
+                splits = list(gkf.split(np.zeros((self.n_samples, 1)),
+                                         y=self.scLab, groups=groups_arr))
+                _, fold_indices = splits[fold]
+                self.fold_indices = np.asarray(fold_indices)
+            else:
+                # Original random-shuffle behavior (preserved for backward compat).
+                np.random.seed(0)
+                indices = np.random.choice(range(self.n_samples), self.n_samples, replace = False)
+                fold_size = self.n_samples // self.tot_folds
+                self.fold_indices = indices[fold * fold_size : (fold + 1) * fold_size]
             self.scSubLab = self.scLab[self.fold_indices]
 
 
@@ -62,7 +93,7 @@ class STSCDataset(Dataset):
             return self.tot_iters
         else:
             return self.n_samples
-        
+
     def get(self, index):
         assert self.phase == "train"
         if self.sample_method == "balance":
@@ -108,7 +139,7 @@ class PatDataset(Dataset):
         self.phase = phase
         self.model_type = model_type
         self.sample_method = sample_method
-    
+
 
 
     def __len__(self):
@@ -127,7 +158,7 @@ class PatDataset(Dataset):
         else:
             raise ValueError("Other sampling method is not implemented yet!")
 
-        
+
     def __getitem__(self, index):
         if self.phase == "train":
             self.get(index)
@@ -137,7 +168,3 @@ class PatDataset(Dataset):
             return {"pid": self.pat_idx[self.idx_select], "data": self.patDat[self.idx_select, :], "time": self.time[self.idx_select], "status": self.status[self.idx_select]}
         else:
             return {"pid": self.pat_idx[self.idx_select], "data": self.patDat[self.idx_select, :], "label": self.patLab[self.idx_select]}
-
-
-
-
