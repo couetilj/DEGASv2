@@ -84,3 +84,62 @@ Seurat
 ggplot2
 
 DESeq2
+
+
+## Optional Scanpy marker backend
+
+The R package can use Scanpy for the marker-testing step in native feature
+selection. Seurat normalization, PCA, neighbors and clustering are unchanged.
+Existing calls continue to use `Seurat::FindAllMarkers`.
+
+After installing the updated `DEGAS_R` package, create a separate Python 3.11
+virtual environment and install the requirements shipped in
+`DEGAS_R/inst/python/requirements-scanpy.txt`:
+
+```sh
+python3.11 -m venv ~/.venvs/degas-scanpy
+~/.venvs/degas-scanpy/bin/python -m pip install -r DEGAS_R/inst/python/requirements-scanpy.txt
+```
+
+```r
+library(DEGASv2)
+Sys.setenv(DEGAS_SCANPY_PYTHON = path.expand("~/.venvs/degas-scanpy/bin/python"))
+selected <- select_genes(scdata, sclab, patdata, phenotype,
+                         sc_marker_fun = FindAllMarkersScanpy)
+# Or pass sc_marker_fun = FindAllMarkersScanpy to DEGAS_preprocessing().
+```
+
+`FindAllMarkersScanpy()` can also be called on a normalized, clustered Seurat
+object directly. Its `directory` argument retains binary exchange files,
+`markers.csv`, and timing/version metadata; by default it uses an R temporary
+directory. The adapter requires Seurat 5's `layer` API. Python runs in a separate
+process; no reticulate configuration is needed. Sparse expression is preserved
+until normalization of selected genes.
+
+The adapter keeps Seurat fold changes and detection fractions, both marker
+signs, minimum detection .25, absolute log2 fold change .25, raw p < .01,
+and assay-wide Bonferroni correction. DEGAS still globally ranks marker rows by
+adjusted p ascending then signed fold change descending, truncates to 200 rows,
+and deduplicates before union with 250 bulk variability and 250 bulk-DE picks.
+These are source quotas, not guaranteed unique counts or per-cluster quotas.
+
+Scanpy is pinned to 1.10.4: a private tie-correction cache avoids recomputing an
+identical rank-block correction for every cluster. It is scoped to the standalone
+Python call and restored on errors. `find_markers(..., cache_ties=False)` disables
+it for programmatic use; do not use the cache concurrently in one Python process.
+Tests compare cached and uncached outputs exactly. Seurat and Scanpy p-values
+can differ because of continuity/exact-test behavior and numerical ties; this
+is not a bitwise-equivalence claim. Globally selected markers need not cover all
+cell types evenly.
+
+Validation scripts (after package installation):
+
+```sh
+Rscript DEGAS_R/tests/scanpy/test_bridge.R DEGAS_R ~/.venvs/degas-scanpy/bin/python /tmp/degas-marker-test
+PYTHONPATH=DEGAS_R/inst/python ~/.venvs/degas-scanpy/bin/python DEGAS_R/tests/scanpy/test_tie_cache.py /tmp/degas-marker-test
+```
+
+The T2D full-data trial used 221,551 cells and 16,561 genes. The Python marker
+stage took 862.45 seconds (including transfer-file loading/writing, excluding
+Seurat preprocessing and R export); default source quotas yielded 666 unique
+genes. Runtime is dataset/environment dependent, not a paired speedup benchmark.

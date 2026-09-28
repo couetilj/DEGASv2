@@ -17,10 +17,12 @@ DEGAS_preprocessing(
   n_bulk_de = 250,
   n_sc_de = 200,
   padj.thresh = 0.05,
-  model_type = "category"
+  model_type = "category",
+  sc_marker_fun = Seurat::FindAllMarkers
 )
 }
 \arguments{
+\item{sc_marker_fun}{Marker function called on the normalized, clustered Seurat object. Use FindAllMarkersScanpy for the optional Scanpy backend.}
 \item{scst_list}{Count matrix or data frame with scRNA-seq/spatial transcriptomics data (rows = genes, columns = cells).}
 
 \item{patdata}{Count Bulk RNA-seq data (genes × samples).}
@@ -43,7 +45,7 @@ If \code{model_type = "survival"}, it must include \code{time} and \code{status}
 
 \item{n_bulk_de}{Number of bulk differential expression genes for phenotype, default = 250.}
 
-\item{n_sc_de}{Number of genes for each single cell clusters, default = 200.}
+\item{n_sc_de}{Number of globally ranked single-cell marker rows before deduplication, default = 200.}
 
 \item{padj.thresh}{Threshold for differential expression analysis, default = 0.05}
 

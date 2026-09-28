@@ -17,10 +17,12 @@ select_genes(
   n_bulk_de = 250,
   n_sc_de = 200,
   padj.thresh = 0.05,
-  model_type = "category"
+  model_type = "category",
+  sc_marker_fun = Seurat::FindAllMarkers
 )
 }
 \arguments{
+\item{sc_marker_fun}{Marker function called on the normalized, clustered Seurat object. Use FindAllMarkersScanpy for the optional Scanpy backend.}
 \item{scdata}{A scRNA-seq count matrix (genes × cells).}
 
 \item{sclab}{Metadata for single-cell data.}

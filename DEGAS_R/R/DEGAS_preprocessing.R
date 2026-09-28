@@ -71,9 +71,11 @@ umap_coordinate <- function(count, metadata = NULL, min.cells = 3, min.features 
 #'
 #' @return Character vector of selected gene names.
 #' @export
+#' @param sc_marker_fun Marker function; use FindAllMarkersScanpy for optional Scanpy testing.
 # gene selection
 select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE,
-                         n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category") {
+                         n_hvg = 250, n_bulk_de = 250, n_sc_de = 200, padj.thresh = 0.05, model_type = "category",
+                         sc_marker_fun = Seurat::FindAllMarkers) {
   genes <- c()
 
   # Bulk HVG
@@ -131,7 +133,7 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
 
   # 3. SC/ST cluster DE
   if (sc_de && !is.null(scdata) && !is.null(sclab)) {
-    obj <- CreateSeuratObject(counts = as.matrix(scdata), meta.data = sclab)
+    obj <- CreateSeuratObject(counts = scdata, meta.data = sclab)
     obj <- NormalizeData(obj)
     obj <- FindVariableFeatures(obj)
     obj <- ScaleData(obj)
@@ -139,7 +141,7 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
     obj <- FindNeighbors(obj, dims = 1:10)
     obj <- FindClusters(obj, resolution = 0.5)
 
-    sc.markers <- FindAllMarkers(
+    sc.markers <- sc_marker_fun(
       obj, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.25
     )
     sc.markers <- na.omit(sc.markers)
@@ -178,22 +180,24 @@ select_genes <- function(scdata, sclab, patdata, phenotype, add_genes = NULL, bu
 #' @param add_genes The user decides whether to add their own gene list by preference. If the user set bulk_hvg, bulk_de and sc_de as FALSE, this gene list is necessary. Default is \code{NULL}.
 #' @param n_hvg Number of bulk high variable genes, default = 250.
 #' @param n_bulk_de Number of bulk differential expression genes for phenotype, default = 250.
-#' @param n_sc_de Number of genes for each single cell clusters, default = 200.
+#' @param n_sc_de Number of globally ranked single-cell marker rows before deduplication, default = 200.
 #' @param padj.thresh Threshold for differential expression analysis, default = 0.05
 #' @param model_type Choose model type (category or survival), default = \code{category}.
 #'
 #' @return A list ready for DEGAS analysis, includes SC/ST RNA-seq data, SC metadata, bulk RNA-seq data, bulk sample phenotype, SC/ST datalist name if multiple datasets.
 #' @export
+#' @param sc_marker_fun Marker function; use FindAllMarkersScanpy for optional Scanpy testing.
 DEGAS_preprocessing <- function(
     scst_list, patdata, phenotype, sclab = NULL,
     bulk_hvg = TRUE, bulk_de = TRUE, sc_de = TRUE, add_genes = NULL,
     n_hvg = 250, n_bulk_de = 250, n_sc_de = 200,
-    padj.thresh = 0.05, model_type = "category") {
+    padj.thresh = 0.05, model_type = "category",
+    sc_marker_fun = Seurat::FindAllMarkers) {
 
   # common genes
   common_genes <- rownames(patdata)
   if (!is.list(scst_list) || inherits(scst_list, "data.frame")) {
-    scst_list <- list(as.matrix(scst_list))
+    scst_list <- list(scst_list)
   }
   for (i in seq_along(scst_list)) {
     common_genes <- intersect(common_genes, rownames(scst_list[[i]]))
@@ -202,7 +206,7 @@ DEGAS_preprocessing <- function(
   patdata <- patdata[common_genes, , drop = FALSE]
 
   scst_list <- lapply(scst_list, function(x) {
-    x <- as.matrix(x)
+    if (inherits(x, "data.frame")) x <- as.matrix(x)
     x[common_genes, , drop = FALSE]
   })
 
@@ -221,7 +225,8 @@ DEGAS_preprocessing <- function(
     n_bulk_de   = n_bulk_de,
     n_sc_de     = n_sc_de,
     padj.thresh = padj.thresh,
-    model_type = model_type
+    model_type = model_type,
+    sc_marker_fun = sc_marker_fun
   )
 
   # Normalization
