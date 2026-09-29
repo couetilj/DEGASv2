@@ -60,6 +60,9 @@ class SweepTest(unittest.TestCase):
         file.write_text('gene_9\ngene_1\ngene_4\n')
         sizes, genes = sweep.feature_candidates([f'gene_{i}' for i in range(10)], genes=file)
         self.assertEqual((sizes, genes), ([3], ['gene_9', 'gene_1', 'gene_4']))
+        (self.root/'bulk_counts.csv').write_text('patient_id,gene_1,gene_1\np0,1,2\n')
+        with self.assertRaisesRegex(ValueError, 'unique, nonempty gene IDs'):
+            sweep.read_inputs(self.root)
         for content in ('absent\ngene_1\n', 'gene_1\ngene_1\n'):
             file.write_text(content)
             with self.assertRaises(ValueError):

@@ -1,4 +1,5 @@
 """CSV inputs and deterministic synthetic data for the validation workflow."""
+import csv
 import numpy as np
 import pandas as pd
 
@@ -17,9 +18,19 @@ def demo(n_genes=40):
             pd.DataFrame(cells, index=[f'cell_{i}' for i in range(100)], columns=genes))
 
 
+def _read_counts(path):
+    # pandas otherwise silently renames duplicate CSV column headers (gene, gene.1).
+    with path.open(newline='') as stream:
+        header = next(csv.reader(stream), [])
+    genes = header[1:]
+    if not genes or len(set(genes)) != len(genes) or any(not gene.strip() for gene in genes):
+        raise ValueError(f'{path.name} requires unique, nonempty gene IDs in its header')
+    return pd.read_csv(path, index_col=0)
+
+
 def read_inputs(folder):
-    bulk = pd.read_csv(folder / 'bulk_counts.csv', index_col=0)
-    cells = pd.read_csv(folder / 'cell_counts.csv', index_col=0)
+    bulk = _read_counts(folder / 'bulk_counts.csv')
+    cells = _read_counts(folder / 'cell_counts.csv')
     meta = pd.read_csv(folder / 'patients.csv', dtype={'patient_id': str, 'study': str})
     bulk.index = bulk.index.astype(str)
     if not bulk.index.is_unique or not cells.index.is_unique or meta.patient_id.duplicated().any():
