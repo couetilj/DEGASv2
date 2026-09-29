@@ -25,7 +25,13 @@ def _read_counts(path):
     genes = header[1:]
     if not genes or len(set(genes)) != len(genes) or any(not gene.strip() for gene in genes):
         raise ValueError(f'{path.name} requires unique, nonempty gene IDs in its header')
-    return pd.read_csv(path, index_col=0, converters={0: str})
+    index_name = '__degas_observation_id__'
+    while index_name in genes:
+        index_name += '_'
+    frame = pd.read_csv(path, header=0, names=[index_name, *genes], dtype={index_name: str})
+    frame = frame.set_index(index_name)
+    frame.index.name = header[0] or None
+    return frame
 
 
 def read_inputs(folder):
