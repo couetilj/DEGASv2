@@ -22,7 +22,13 @@ torch.backends.cudnn.deterministic = True
 
 def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None,
               pat_eval_expr_mat = None, pat_eval_lab_mat = None, pat_eval_ids = None,
-              heldout_group = None):
+              heldout_group = None, return_model = False):
+    """Train one DEGAS model and write its usual outputs.
+
+    With return_model=True also return the fitted model for direct prediction
+    and SHAP: ``directory, model = run_model(...)``. The default still returns
+    only the directory. Call model.set_evaluate_mode() before inference.
+    """
     # define data loaders and model
     high_reso_loader, low_reso_loader = load_datasets("train", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
     eval_expr = pat_expr_mat if pat_eval_expr_mat is None else pat_eval_expr_mat
@@ -81,7 +87,7 @@ def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc
         epoch += 1   
 
     model.loss_rec.to_csv(os.path.join(model.save_dir, "losses.csv".format(epoch)))
-    return model.save_dir
+    return (model.save_dir, model) if return_model else model.save_dir
 
 
 def _aggregate_high_resolution(save_results_folder, opt):

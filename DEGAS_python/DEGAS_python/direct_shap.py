@@ -15,12 +15,17 @@ class DiseaseScore(nn.Module):
         super().__init__()
         self.extractor = degas.feature_extractor_layer
         self.head = degas.low_reso_pred_layer
+        if not isinstance(class_index, int) or class_index < 0:
+            raise ValueError('class_index must be a nonnegative integer')
         self.class_index = class_index
         self.eval()
 
     def forward(self, x):
         _, embedding = self.extractor(x)
-        return torch.softmax(self.head(embedding), dim=1)[:, self.class_index:self.class_index+1]
+        logits = self.head(embedding)
+        if logits.ndim != 2 or logits.shape[1] < 2 or self.class_index >= logits.shape[1]:
+            raise ValueError('DiseaseScore requires a classification head and valid class_index')
+        return torch.softmax(logits, dim=1)[:, self.class_index:self.class_index+1]
 
 
 def explain(model, background, observations, nsamples=512, seed=42, batch_size=128):
@@ -30,6 +35,8 @@ def explain(model, background, observations, nsamples=512, seed=42, batch_size=1
     Monte Carlo accuracy before interpretation. Model is put in eval mode.
     Background is a declared scientific reference, not inferred here.
     """
+    if not isinstance(nsamples, int) or nsamples < 1 or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError('nsamples and batch_size must be positive integers')
     import shap
     model.eval()
     device = next(model.parameters()).device
@@ -37,6 +44,8 @@ def explain(model, background, observations, nsamples=512, seed=42, batch_size=1
     observations = torch.as_tensor(observations, dtype=torch.float32, device=device)
     if background.ndim != 2 or observations.ndim != 2 or background.shape[1] != observations.shape[1]:
         raise ValueError('Expected aligned samples-by-features matrices')
+    if not len(background) or not len(observations) or not background.shape[1]:
+        raise ValueError('Background and observations must be nonempty')
     if not torch.isfinite(background).all() or not torch.isfinite(observations).all():
         raise ValueError('Nonfinite input')
     with torch.no_grad():

@@ -22,4 +22,33 @@ class DirectShapTest(unittest.TestCase):
         torch.testing.assert_close(wrapper(x)[:,0],torch.softmax(model.low_reso_pred_layer(x*2),1)[:,1])
         wrapper(x).sum().backward();self.assertTrue(torch.isfinite(x.grad).all())
 
+class InvalidShapTest(unittest.TestCase):
+    def test_empty_and_nonfinite_inputs(self):
+        model = torch.nn.Linear(3, 1)
+        for background, observations in [
+            (np.empty((0, 3)), np.ones((1, 3))),
+            (np.ones((1, 3)), np.empty((0, 3))),
+            (np.ones((2, 3)), np.full((1, 3), np.nan)),
+            (np.ones((2, 2)), np.ones((1, 3))),
+        ]:
+            with self.assertRaises(ValueError):
+                explain(model, background, observations)
+
+    def test_rejects_cox_and_invalid_class(self):
+        class Extract(torch.nn.Module):
+            def forward(self, x):
+                return x, x
+        class Mock:
+            pass
+        model = Mock()
+        model.feature_extractor_layer = Extract()
+        model.low_reso_pred_layer = torch.nn.Linear(3, 1)
+        with self.assertRaises(ValueError):
+            DiseaseScore(model)(torch.ones((2, 3)))
+        model.low_reso_pred_layer = torch.nn.Linear(3, 2)
+        with self.assertRaises(ValueError):
+            DiseaseScore(model, class_index=2)(torch.ones((2, 3)))
+        with self.assertRaises(ValueError):
+            DiseaseScore(model, class_index=-1)
+
 if __name__=='__main__':unittest.main()

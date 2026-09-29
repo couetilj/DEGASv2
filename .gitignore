@@ -2,3 +2,10 @@ AD_example/scDat.csv
 AD_example/scDat.csv
 AD_example/scDat.csv
 .Rproj.user
+
+# Local Python/test and tutorial outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+runs/

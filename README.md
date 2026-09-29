@@ -143,3 +143,16 @@ The T2D full-data trial used 221,551 cells and 16,561 genes. The Python marker
 stage took 862.45 seconds (including transfer-file loading/writing, excluding
 Seurat preprocessing and R export); default source quotas yielded 666 unique
 genes. Runtime is dataset/environment dependent, not a paired speedup benchmark.
+
+## Validation, gene-set-size ensembles, evaluation plots and SHAP
+
+The [runnable Python tutorial](examples/validation/README.md) covers raw-count
+preprocessing, DEGAS training, selectable **study-level or patient-level** folds,
+a default 10% patient holdout (or at least one whole study), and native AUROC /
+five-metric plots. It selects all gene-set sizes within one bootstrap SE of the
+best validation AUROC, then averages their per-size DEGAS percentile ranks.
+Final holdout evaluation is kept separate from size selection.
+
+[Direct SHAP](DIRECT_SHAP.md) explains DEGAS class probabilities through the
+trained network, without a surrogate. Both features are optional; existing R
+and Python training calls continue to work.
