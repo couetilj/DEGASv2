@@ -269,12 +269,12 @@ figures = plot_validation(metrics, selection, output_dir='figures/my_cohort')
 ## Direct SHAP and outputs
 
 Add `--shap` when preparing a run to explain final models. See the
-[direct SHAP guide](../../DIRECT_SHAP.md). Every seed uses the same sampled
+[direct SHAP guide](../../DIRECT_SHAP.md). Every seed uses the same
 background cell IDs across all retained sizes. **All cells are predicted and
-explained by default**, in batches. The background defaults to a reproducible
-sample of up to 128 cells from the lowest-risk quartile of the final ensemble.
-All ties at the 25th percentile are eligible. `--shap-background-size 0` uses the
-whole eligible quartile. See the direct guide for population/custom references
+explained by default**, in batches. The background includes **all cells in the
+lowest-risk quartile** of the final ensemble, including ties at the 25th percentile.
+The default `--shap-background-size 0` imposes no cap. A positive value explicitly
+opts into background subsampling. See the direct guide for population/custom references
 and optional explained-cell subsampling. The local `run --shap` executes the
 explanation phase automatically after final pooling. SHAP explains
 raw class-1 probabilities through the trained network; it does not explain the

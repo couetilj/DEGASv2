@@ -6,10 +6,13 @@ from DEGAS_python.shap_workflow import choose_reference
 
 class ReferenceTest(unittest.TestCase):
     def test_low_quartile_and_all_observations(self):
-        result = choose_reference(np.arange(100), [str(i) for i in range(100)])
-        self.assertEqual(result['background_indices'], list(range(25)))
-        self.assertEqual(result['observation_indices'], list(range(100)))
-        self.assertEqual(result['cutoff'], 24.75)
+        result = choose_reference(np.arange(1000), [str(i) for i in range(1000)])
+        self.assertEqual(result['background_indices'], list(range(250)))
+        self.assertEqual(result['observation_indices'], list(range(1000)))
+        self.assertEqual(result['cutoff'], 249.75)
+        from DEGAS_python.sweep import build_parser
+        options = build_parser().parse_args(['prepare', '--output', '/tmp/reference-default'])
+        self.assertEqual(options.shap_background_size, 0)
 
     def test_boundary_ties_and_constant_scores(self):
         result = choose_reference([0, 1, 1, 1, 2, 3, 4, 5], list('abcdefgh'), background_size=0)
@@ -19,13 +22,13 @@ class ReferenceTest(unittest.TestCase):
 
     def test_sampling_is_reproducible_and_separate(self):
         ids = [str(i) for i in range(1000)]
-        a = choose_reference(np.arange(1000), ids)
-        b = choose_reference(np.arange(1000), ids, max_cells=30)
+        a = choose_reference(np.arange(1000), ids, background_size=128)
+        b = choose_reference(np.arange(1000), ids, max_cells=30, background_size=128)
         self.assertEqual(a['background_ids'], b['background_ids'])
         self.assertEqual(len(a['background_ids']), 128)
         self.assertEqual(len(b['observation_ids']), 30)
         self.assertTrue(set(a['background_ids']) <= set(a['eligible_ids']))
-        self.assertEqual(b, choose_reference(np.arange(1000), ids, max_cells=30))
+        self.assertEqual(b, choose_reference(np.arange(1000), ids, max_cells=30, background_size=128))
 
     def test_population_and_custom(self):
         result = choose_reference([3, 2, 1], list('abc'), mode='population', background_size=0)

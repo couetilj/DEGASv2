@@ -488,7 +488,7 @@ def build_parser():
         p.add_argument('--shap-samples', type=int, default=512)
         p.add_argument('--shap-background', choices=['low-risk-quartile', 'population', 'custom'], default='low-risk-quartile')
         p.add_argument('--shap-background-ids', type=Path, help='Custom background: one cell ID per line')
-        p.add_argument('--shap-background-size', type=int, default=128, help='Background sample cap; 0 uses all eligible cells')
+        p.add_argument('--shap-background-size', type=int, default=0, help='Optional background sample cap; default 0 uses all eligible cells')
         p.add_argument('--shap-max-cells', type=int, default=0, help='Optional explained-cell sample cap; default 0 explains all')
         p.add_argument('--shap-chunk-size', type=int, default=256, help='Explained cells per resumable chunk')
         p.add_argument('--demo-genes', type=int, default=40)

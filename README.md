@@ -171,7 +171,7 @@ a success-dependent pooling job, and a separate final-training array. The same
 engine also runs locally. Incomplete arrays cannot choose retained sizes.
 
 [Direct SHAP](DIRECT_SHAP.md) explains every cell by default, relative to a shared
-background sampled from the final ensemble’s lowest-risk quartile. Population
+background comprising all cells in the final ensemble’s lowest-risk quartile. Population
 and custom cell-ID backgrounds are also available; explanation batches resume
 on retry and can run through SLURM. SHAP explains class probabilities through the trained
 network, without a surrogate. Existing R and Python training calls remain valid.

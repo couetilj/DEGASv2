@@ -9,7 +9,7 @@ import pandas as pd
 
 
 def choose_reference(scores, cell_ids, *, mode='low-risk-quartile', custom_ids=None,
-                     background_size=128, max_cells=0, seed=42):
+                     background_size=0, max_cells=0, seed=42):
     """Use <= the empirical 25th percentile, retaining all boundary ties."""
     scores = np.asarray(scores, dtype=float)
     ids = list(cell_ids)

@@ -15,8 +15,8 @@ population; it is not a limit on which cells receive explanations.
 The default `--shap-background low-risk-quartile` uses the final ensemble's
 average-rank cell scores to define eligibility at or below the empirical 25th
 percentile. Boundary ties are included (constant scores make every cell eligible).
-It then samples up to 128 eligible cells without replacement, reproducibly using
-`--seed`. The same cell IDs are used across every retained size and seed, with
+**All eligible cells are used as the background by default**, without a size cap
+(`--shap-background-size 0`). The same cell IDs are used across every retained size and seed, with
 each model's own gene list and preprocessing. This reference is frozen once,
 after final pooling, in `reports/final/shap_reference.json`; it records the cutoff,
 all eligible IDs, actual background IDs and explained IDs. Holdout patient labels
@@ -34,12 +34,11 @@ Choose these options when preparing or running a workflow:
 
 ```bash
 # Explain all cells relative to the entire low-risk quartile:
-python -m DEGAS_python.sweep run --output runs/shap_quartile --shap \
-  --shap-background-size 0
+python -m DEGAS_python.sweep run --output runs/shap_quartile --shap
 
-# Explain all cells relative to a sample of the full cell population:
+# Explain all cells relative to the entire cell population:
 python -m DEGAS_python.sweep run --output runs/shap_population --shap \
-  --shap-background population --shap-background-size 128
+  --shap-background population
 
 # Prespecified controls or matched reference: one input cell ID per line:
 python -m DEGAS_python.sweep run --input data --output runs/shap_custom --shap \
@@ -47,13 +46,19 @@ python -m DEGAS_python.sweep run --input data --output runs/shap_custom --shap \
   --shap-background-size 0
 ```
 
+`--shap-background-size N` with a positive N explicitly opts into a reproducible
+background sample without replacement, using `--seed`; no sampling cap is applied
+by default. This also applies to population and custom references.
+
 `--shap-max-cells N` explicitly opts into a reproducible sample of cells to
 explain; the default 0 means all. `--shap-chunk-size` controls memory and restart
 granularity. `--shap-samples` controls expected-gradient Monte Carlo samples per
 explained cell, independently of background size. Increasing these budgets can
 increase runtime and memory; all-cell attribution output scales as cells × genes
-× retained models. The defaults 128 and 512 are computation budgets, not validated
-biological or accuracy thresholds. Inspect the residual diagnostics.
+× retained models. The default 512 Monte Carlo samples per explained cell is
+a numerical approximation budget, not a limit on background membership; SHAP
+draws those samples from the full supplied background. Inspect the residual
+diagnostics and increase this budget as needed.
 
 Local `run --shap` runs all phases. With SLURM, submit `--phase explain` after
 final pooling, using the same resource flags as training. One job restores each
