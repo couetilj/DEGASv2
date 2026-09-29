@@ -63,6 +63,13 @@ class SweepTest(unittest.TestCase):
         (self.root/'bulk_counts.csv').write_text('patient_id,gene_1,gene_1\np0,1,2\n')
         with self.assertRaisesRegex(ValueError, 'unique, nonempty gene IDs'):
             sweep.read_inputs(self.root)
+        (self.root/'bulk_counts.csv').write_text('patient_id,gene_1,gene_2\n0001,1,2\n0002,3,4\n')
+        (self.root/'patients.csv').write_text('patient_id,study,label\n0001,A,0\n0002,A,1\n')
+        (self.root/'cell_counts.csv').write_text(',gene_1,gene_2\n0003,1,2\n')
+        (self.root/'cells.csv').write_text('cell_id,patient_id\n0003,reference_donor\n')
+        bulk, _, cells = sweep.read_inputs(self.root)
+        self.assertEqual(bulk.index.tolist(), ['0001', '0002'])
+        self.assertEqual(cells.index.tolist(), ['0003'])
         for content in ('absent\ngene_1\n', 'gene_1\ngene_1\n'):
             file.write_text(content)
             with self.assertRaises(ValueError):
