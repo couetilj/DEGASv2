@@ -277,9 +277,10 @@ class BaseModel():
         for i, input in enumerate(data_loader):
             self.input = input["data"].float().to(self.device)
             _, self.emb3 = self.feature_extractor_layer(self.input)
-            self.pred = self.low_reso_pred_layer(self.emb3).cpu().detach().numpy().squeeze()
-            if len(self.pred.shape) > 1:
+            self.pred = self.low_reso_pred_layer(self.emb3).cpu().detach().numpy()
+            if self.pred.ndim == 2 and self.pred.shape[1] > 1:
                 self.pred = softmax(self.pred, axis = 1)[:, 1] # for classification, we only extract score for disease
+            self.pred = self.pred.reshape(-1)
             if "index" in input.keys(): # for sc, st data
                 results_df.append(pd.DataFrame({"index": np.array(input["index"]), "hazard": self.pred}))
             elif "pid" in input.keys(): # for pat data

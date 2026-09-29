@@ -143,3 +143,35 @@ The T2D full-data trial used 221,551 cells and 16,561 genes. The Python marker
 stage took 862.45 seconds (including transfer-file loading/writing, excluding
 Seurat preprocessing and R export); default source quotas yielded 666 unique
 genes. Runtime is dataset/environment dependent, not a paired speedup benchmark.
+
+## Validation, feature selection, evaluation plots and SHAP
+
+The [Python guide](examples/validation/README.md) provides two workflows with the
+same preprocessing, study/patient validation, five-metric evaluation plots and
+untouched final holdout (default 10% of patients or at least one whole study).
+
+### User-defined feature set & sizes
+
+Supply an exact gene list with `--genes my_genes.txt`, or one or more counts of
+training-bulk highly variable genes with `--sizes 500 1500 5000 10000`. Every
+requested gene/count must be available in both input assays. An exact list is
+preserved; variable genes are selected separately inside each training fold.
+
+### Empirically-derived feature set size
+
+Use `--feature-mode empirical` to evaluate a default grid from 10 through 10,000
+genes plus the full shared-gene count, bounded by available features. The final
+sizes are determined by validation: retain all sizes within one bootstrap SE of
+the best equal-study AUROC, then average their per-size DEGAS percentile ranks.
+`--max-genes` optionally limits the search budget.
+
+The guide includes [parallel SLURM training and pooling](examples/validation/README.md#parallel-training-and-pooling-with-slurm):
+one task per fold × size × seed, frozen input/split manifests, resumable workers,
+a success-dependent pooling job, and a separate final-training array. The same
+engine also runs locally. Incomplete arrays cannot choose retained sizes.
+
+[Direct SHAP](DIRECT_SHAP.md) explains every cell by default, relative to a shared
+background comprising all cells in the final ensemble’s lowest-risk quartile. Population
+and custom cell-ID backgrounds are also available; explanation batches resume
+on retry and can run through SLURM. SHAP explains class probabilities through the trained
+network, without a surrogate. Existing R and Python training calls remain valid.

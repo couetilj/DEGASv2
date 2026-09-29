@@ -1,0 +1,25 @@
+name: Python validation and SHAP
+on:
+  push:
+    paths: ['DEGAS_python/**', 'tests/**', 'examples/validation/**', '.github/workflows/validation.yml']
+  pull_request:
+    paths: ['DEGAS_python/**', 'tests/**', 'examples/validation/**', '.github/workflows/validation.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e './DEGAS_python[validation,explain]' pytest
+      - run: python -m pytest DEGAS_python/tests tests -q
+        env:
+          MPLBACKEND: Agg
+      - name: Study and patient end-to-end smoke checks
+        run: |
+          python examples/validation/run.py --output /tmp/study --split study --sizes 10 20 --seeds 1 --iters 2 --bootstrap 100 --shap --shap-samples 32
+          python examples/validation/run.py --output /tmp/patient --split patient --folds 3 --feature-mode empirical --seeds 1 --iters 2 --bootstrap 100
+        env:
+          MPLBACKEND: Agg
