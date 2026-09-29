@@ -2,10 +2,14 @@
 
 Local CPU checks on September 29, 2026 (macOS arm64, Python 3.13):
 
-- 34 tests passed, covering patient/study separation, repeat-patient grouping,
+- 38 tests passed, covering patient/study separation, repeat-patient grouping,
   invalid designs, equal-study weighting with unequal cohort sizes, paired
   bootstrap SE, complete size coverage, tie ranks, plot exports, direct SHAP,
   preprocessing, existing OOF calibration, and singleton classifier/Cox batches.
+- All-cell SHAP checks cover the empirical low-risk quartile (including ties),
+  population/custom backgrounds, reproducible independent sampling caps, all 100
+  synthetic cells across two seeds, identical background IDs, checkpoint prediction
+  parity, chunk reuse on restart and seed-mean attribution equality.
 - New workflow tests cover automatic grids through 16,561 genes, exact-list
   order/availability, training-only feature selection, all-seed pooling,
   incomplete/corrupt/stale result rejection, duplicate IDs, changed inputs,
@@ -13,11 +17,13 @@ Local CPU checks on September 29, 2026 (macOS arm64, Python 3.13):
 - Real independent Python worker processes trained an exact list concurrently;
   their results pooled through final holdout scoring and SHAP. A separate real
   training task used 3,000 input genes. Generated bash scripts passed syntax checks.
-- A full synthetic empirical run evaluated 12 sizes through 3,000 genes across
+- The current local CLI completed validation, final fitting and all-cell SHAP for
+  two candidate sizes, with 40-cell chunks and 32 integration samples.
+- Before the all-cell default change, a full synthetic empirical run evaluated 12 sizes through 3,000 genes across
   three patient folds (36 fits), pooled them, trained all five retained sizes,
   and completed final holdout scoring and SHAP. Both wide-grid figures were
   visually inspected. This two-iteration smoke run checks execution only.
-- Both study and patient end-to-end synthetic workflows completed with direct
+- Earlier study and patient end-to-end synthetic workflows completed with direct
   SHAP. Each checks native DEGAS versus wrapper prediction parity.
 - A single-study CSV input run completed using patient splits, including ID-based
   input alignment, independent-reference metadata and the final holdout.

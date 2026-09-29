@@ -81,6 +81,10 @@ def prepare(args):
         raise ValueError('Training counts and dimensions must be positive')
     if args.batch_size < 2 or args.feature_dim < 2 or args.bootstrap < 2:
         raise ValueError('Batch size, feature dimension and bootstrap count must be >=2')
+    if args.shap_background_size < 0 or args.shap_max_cells < 0 or args.shap_chunk_size < 1:
+        raise ValueError('SHAP sizes must be nonnegative; chunk size must be positive')
+    if (args.shap_background == 'custom') != (args.shap_background_ids is not None):
+        raise ValueError('Custom background requires --shap-background custom and --shap-background-ids')
     bulk, meta, cells = read_inputs(args.input) if args.input else demo(args.demo_genes)
     if not bulk.columns.is_unique or not cells.columns.is_unique:
         raise ValueError('Gene IDs must be unique')
@@ -89,6 +93,11 @@ def prepare(args):
     for matrix in (bulk, cells):
         if not len(matrix) or not np.isfinite(matrix.to_numpy()).all() or (matrix.to_numpy() < 0).any():
             raise ValueError('Supply finite, nonnegative raw counts')
+    custom_ids = None
+    if args.shap_background_ids is not None:
+        custom_ids = [v.strip() for v in args.shap_background_ids.read_text().splitlines() if v.strip()]
+        if not custom_ids or len(set(custom_ids)) != len(custom_ids) or set(custom_ids) - set(cells.index.astype(str)):
+            raise ValueError('Background IDs must be nonempty, unique and present in cells')
     sizes, exact = feature_candidates(common, mode=args.feature_mode, sizes=args.sizes,
                                       genes=args.genes, max_genes=args.max_genes)
     dev, test = holdout_split(meta, mode=args.split, fraction=args.holdout_fraction, seed=args.seed)
@@ -105,6 +114,8 @@ def prepare(args):
     meta.to_csv(run/'inputs/patients.csv', index=False)
     write_json(run/'inputs/genes.json', list(common))
     write_json(run/'inputs/cell_ids.json', list(cells.index.astype(str)))
+    if custom_ids is not None:
+        write_json(run/'inputs/shap_background_ids.json', custom_ids)
     split_map = {str(i): dict(train=dev[tr].tolist(), evaluate=dev[va].tolist())
                  for i, (tr, va) in enumerate(folds)}
     split_map['final'] = dict(train=dev.tolist(), evaluate=test.tolist())
@@ -147,7 +158,12 @@ def _config(run):
 
 def _task_list(run, phase):
     config = _config(run)
-    if phase == 'validation':
+    if phase == 'explain':
+        _report(run, 'final')
+        if not config['options']['shap']:
+            raise ValueError('Prepare with --shap to enable explanations')
+        expected = _task_list(run, 'final')
+    elif phase == 'validation':
         expected = _tasks(range(len(config['splits'])-1), config['sizes'], config['options']['seeds'])
     else:
         report = _report(run, 'validation')
@@ -161,7 +177,10 @@ def _task_list(run, phase):
 
 
 def _fingerprint(run, phase):
-    return digest(run/'run.json') + ':' + digest(run/f'{phase}_tasks.json')
+    value = digest(run/'run.json') + ':' + digest(run/f'{phase}_tasks.json')
+    if phase == 'explain':
+        value += ':' + digest(run/'final_pooled.json')
+    return value
 
 
 def _completion(run, phase, task):
@@ -210,6 +229,9 @@ def worker(run, phase, task_id):
     if _completion(run, phase, task) is not None:
         print(f'{phase} task {task_id} already complete')
         return
+    if phase == 'explain':
+        from .shap_workflow import explain_worker
+        return explain_worker(run, task)
     config = _config(run)
     settings = config['options']
     feature_file = f"features/{task['fold']}_{task['size']}.json"
@@ -259,17 +281,8 @@ def worker(run, phase, task_id):
                 c[start:start+1024] = score(torch.as_tensor(np.array(z[start:start+1024]), device=device)).cpu().numpy().ravel()
         np.save(attempt/'cell_scores.npy', c)
         artifacts.append('cell_scores.npy')
-        if settings['shap']:
-            rng = np.random.default_rng(settings['seed'])
-            bg_ids = rng.choice(len(z), min(32, len(z)), replace=False)
-            obs_ids = np.arange(min(16, len(z)))
-            explanation = explain(score, z[bg_ids], z[obs_ids], nsamples=settings['shap_samples'], seed=settings['seed'])
-            np.testing.assert_allclose(explanation['prediction'], c[obs_ids], atol=1e-6)
-            cell_ids = np.asarray(json.loads((run/'inputs/cell_ids.json').read_text()))
-            np.savez_compressed(attempt/'shap.npz', **explanation, genes=np.asarray(selected),
-                                inputs=z[obs_ids], background=z[bg_ids],
-                                observation_ids=cell_ids[obs_ids], background_ids=cell_ids[bg_ids])
-            artifacts.append('shap.npz')
+        artifacts.extend(str(p.relative_to(attempt)) for p in (attempt/'model').rglob('*')
+                         if p.is_file() and (p.suffix == '.pth' or p.name == 'configs.json'))
     # Large normalized scratch matrices can be reconstructed from frozen raw inputs.
     del x, z
     (attempt/'bulk_preprocessed.npy').unlink()
@@ -312,8 +325,11 @@ def collect(run, phase):
     for file, sha in {**config['input_hashes'], **config['feature_hashes']}.items():
         if digest(run/file) != sha:
             raise ValueError(f'Frozen input changed: {file}')
+    if phase == 'explain':
+        from .shap_workflow import collect_explanations
+        return collect_explanations(run, tasks)
     metadata = pd.read_csv(run/'inputs/patients.csv', dtype={'patient_id': str, 'study': str})
-    tables, cell_sums, explanations = [], {}, {}
+    tables, cell_sums = [], {}
     for task in tasks:
         attempt = _completion(run, phase, task)
         part = pd.read_csv(attempt/'predictions.csv', dtype={'patient_id': str, 'study': str})
@@ -332,9 +348,6 @@ def collect(run, phase):
                 raise ValueError('Invalid cell prediction coverage/values')
             cell_sums.setdefault(task['size'], np.zeros(n_cells))
             cell_sums[task['size']] += c / config['options']['seeds']
-            if config['options']['shap']:
-                with np.load(attempt/'shap.npz') as data:
-                    explanations.setdefault(task['size'], []).append({k: data[k] for k in data.files})
     submodels = pd.concat(tables, ignore_index=True)
     if submodels.duplicated(['patient_id', 'size', 'seed']).any():
         raise ValueError('Duplicate patient/size/seed predictions')
@@ -357,7 +370,7 @@ def collect(run, phase):
         # Exact gene lists have a single candidate, whose size is retained trivially.
         write_json(run/'final_tasks.json', _tasks(['final'], sizes, config['options']['seeds']))
     else:
-        _final_report(run, report, predictions, cell_sums, explanations)
+        _final_report(run, report, predictions, cell_sums)
     _publish(run/f'{phase}_pooled.json', dict(directory=str(report.relative_to(run)),
                                             fingerprint=_fingerprint(run, phase),
                                             hashes={str(p.relative_to(report)): digest(p) for p in report.rglob('*') if p.is_file()}))
@@ -366,7 +379,7 @@ def collect(run, phase):
     return report
 
 
-def _final_report(run, report, predictions, cell_sums, explanations):
+def _final_report(run, report, predictions, cell_sums):
     from sklearn.metrics import roc_auc_score, average_precision_score
     p = predictions.pivot(index=['patient_id', 'label'], columns='size', values='score')
     y = p.index.get_level_values('label').to_numpy()
@@ -374,23 +387,19 @@ def _final_report(run, report, predictions, cell_sums, explanations):
     c = pd.DataFrame(cell_sums, index=json.loads((run/'inputs/cell_ids.json').read_text()))
     p.to_csv(report/'holdout_raw_scores_by_size.csv')
     c.to_csv(report/'cell_raw_scores_by_size.csv')
-    average_rank_scores(c, list(c.columns)).to_csv(report/'cell_average_rank_scores.csv')
+    cell_ranks = average_rank_scores(c, list(c.columns))
+    cell_ranks.to_csv(report/'cell_average_rank_scores.csv')
+    if _config(run)['options']['shap']:
+        from .shap_workflow import reference_manifest
+        reference = reference_manifest(run, cell_ranks.to_numpy())
+        write_json(report/'shap_reference.json', reference)
+        write_json(run/'explain_tasks.json', _task_list(run, 'final'))
     ranked = average_rank_scores(p, list(p.columns))
     ranked.to_csv(report/'holdout_average_rank_scores.csv')
     write_json(report/'holdout_metrics.json', dict(
         aggregation='pooled final holdout patients', n_patients=len(y),
         rank_ensemble=dict(AUROC=roc_auc_score(y, ranked), average_precision=average_precision_score(y, ranked)),
         raw_probability_by_size={int(size): classification_metrics(y, p[size]) for size in p.columns}))
-    for size, results in explanations.items():
-        values = np.mean([r['values'] for r in results], axis=0)
-        base = np.mean([r['base_value'] for r in results])
-        prediction = np.mean([r['prediction'] for r in results], axis=0)
-        np.savez_compressed(report/f'shap_seed_mean_{size}.npz', values=values, base_value=base,
-                            prediction=prediction, residual=prediction-base-values.sum(axis=1),
-                            genes=results[0]['genes'], inputs=results[0]['inputs'], observation_ids=results[0]['observation_ids'])
-        pd.DataFrame([dict(seed=i, mean_abs_residual=float(np.abs(r['residual']).mean()),
-                           p95_abs_residual=float(np.quantile(np.abs(r['residual']), .95)))
-                      for i, r in enumerate(results)]).to_csv(report/f'shap_diagnostics_{size}.csv', index=False)
 
 
 def submit(args):
@@ -477,11 +486,16 @@ def build_parser():
         p.add_argument('--bootstrap', type=int, default=20000)
         p.add_argument('--shap', action='store_true')
         p.add_argument('--shap-samples', type=int, default=512)
+        p.add_argument('--shap-background', choices=['low-risk-quartile', 'population', 'custom'], default='low-risk-quartile')
+        p.add_argument('--shap-background-ids', type=Path, help='Custom background: one cell ID per line')
+        p.add_argument('--shap-background-size', type=int, default=128, help='Background sample cap; 0 uses all eligible cells')
+        p.add_argument('--shap-max-cells', type=int, default=0, help='Optional explained-cell sample cap; default 0 explains all')
+        p.add_argument('--shap-chunk-size', type=int, default=256, help='Explained cells per resumable chunk')
         p.add_argument('--demo-genes', type=int, default=40)
     for action in ('worker', 'collect', 'status', 'submit'):
         p = commands.add_parser(action)
         p.add_argument('--run', type=Path, required=True)
-        p.add_argument('--phase', choices=['validation', 'final'], default='validation')
+        p.add_argument('--phase', choices=['validation', 'final', 'explain'], default='validation')
         if action == 'worker':
             p.add_argument('--task-id', type=int, required=True)
         if action == 'submit':
@@ -505,7 +519,7 @@ def main(argv=None):
     if args.command in ('run', 'prepare'):
         run = prepare(args)
         if args.command == 'run':
-            for phase in ('validation', 'final'):
+            for phase in (('validation', 'final', 'explain') if args.shap else ('validation', 'final')):
                 for task in _task_list(run, phase):
                     worker(run, phase, task['task_id'])
                 collect(run, phase)

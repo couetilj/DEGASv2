@@ -137,8 +137,18 @@ independent training jobs. Final training uses only the retained sizes × seeds.
      --pool-partition CPU_PARTITION --pool-mem 16G
    ```
 
-   Final raw/average-rank scores, holdout metrics and optional seed-mean SHAP
-   results appear in `reports/final/`. User-defined lists or sizes use this same
+   Final raw/average-rank scores and holdout metrics appear in `reports/final/`.
+   Once final pooling finishes, runs prepared with `--shap` can submit explanations:
+
+   ```bash
+   python -m DEGAS_python.sweep submit --run runs/empirical_cluster \
+     --phase explain --account YOUR_ACCOUNT --partition GPU_PARTITION \
+     --gpus 1 --cpus 2 --mem 32G --time 04:00:00 --parallel 8 \
+     --pool-partition CPU_PARTITION --pool-mem 16G
+   ```
+
+   This uses one job per retained model, with resumable cell chunks.
+   Seed-mean explanations appear in `reports/explain/`. User-defined lists or sizes use this same
    SLURM procedure: replace the `prepare` feature arguments with `--genes` or
    `--sizes`. Both modes always make the same validation figures.
 
@@ -260,17 +270,24 @@ figures = plot_validation(metrics, selection, output_dir='figures/my_cohort')
 
 Add `--shap` when preparing a run to explain final models. See the
 [direct SHAP guide](../../DIRECT_SHAP.md). Every seed uses the same sampled
-background/observations within each size. Default 32 background and 16 explained
-cells are an example budget, not a biologically chosen reference. SHAP explains
+background cell IDs across all retained sizes. **All cells are predicted and
+explained by default**, in batches. The background defaults to a reproducible
+sample of up to 128 cells from the lowest-risk quartile of the final ensemble.
+All ties at the 25th percentile are eligible. `--shap-background-size 0` uses the
+whole eligible quartile. See the direct guide for population/custom references
+and optional explained-cell subsampling. The local `run --shap` executes the
+explanation phase automatically after final pooling. SHAP explains
 raw class-1 probabilities through the trained network; it does not explain the
 nonlinear average-rank ensemble. Different gene lists remain separate.
 
 `run.json` records options, versions, source/input hashes and splits.
 `fold_membership.csv`, `features/`, `validation_tasks.json` and `final_tasks.json`
 record the frozen design. Completed tasks have separate checkpoints, losses,
-gene lists, predictions and optional per-seed SHAP under
+gene lists and predictions under
 `validation/task_*/attempt_*/` or `final/task_*/attempt_*/`.
-`reports/validation/` and `reports/final/` link to the successfully pooled,
+Per-model SHAP chunks are in `explain/task_*/chunks/`; pooled memory-mapped
+arrays, metadata and residual diagnostics are in `reports/explain/size_*/`.
+`reports/validation/`, `reports/final/` and `reports/explain/` link to the successfully pooled,
 versioned report directories recorded in `*_pooled.json`.
 
 ## Quick synthetic checks

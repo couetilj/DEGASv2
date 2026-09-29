@@ -49,7 +49,8 @@ def explain(model, background, observations, nsamples=512, seed=42, batch_size=1
     if not torch.isfinite(background).all() or not torch.isfinite(observations).all():
         raise ValueError('Nonfinite input')
     with torch.no_grad():
-        base = model(background).mean().item()
+        base = sum(model(background[i:i+batch_size]).sum().item()
+                   for i in range(0, len(background), batch_size)) / len(background)
         prediction = model(observations).flatten().cpu().numpy()
     explainer = shap.GradientExplainer(model, background, batch_size=batch_size)
     with torch.enable_grad():

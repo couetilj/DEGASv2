@@ -190,8 +190,8 @@ class SweepTest(unittest.TestCase):
         gene_file = self.root/'genes.txt'
         gene_file.write_text('gene_9\ngene_1\ngene_4\n')
         args = sweep.build_parser().parse_args(['prepare', '--output', str(self.root/'exact'),
-                    '--genes', str(gene_file), '--seeds', '1', '--iters', '2', '--bootstrap', '30',
-                    '--shap', '--shap-samples', '32'])
+                    '--genes', str(gene_file), '--seeds', '2', '--iters', '2', '--bootstrap', '30',
+                    '--shap', '--shap-samples', '32', '--shap-chunk-size', '40'])
         run = sweep.prepare(args)
         def call(task_id):
             result = subprocess.run([sys.executable, '-m', 'DEGAS_python.sweep', 'worker', '--run', str(run),
@@ -199,7 +199,7 @@ class SweepTest(unittest.TestCase):
                                      text=True, env=dict(os.environ, MPLBACKEND='Agg', OMP_NUM_THREADS='1'))
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            list(pool.map(call, range(3)))
+            list(pool.map(call, range(6)))
         before = list((run/'validation/task_000000').glob('attempt_*'))
         sweep.worker(run, 'validation', 0)
         self.assertEqual(before, list((run/'validation/task_000000').glob('attempt_*')))
@@ -208,9 +208,40 @@ class SweepTest(unittest.TestCase):
         report = sweep.collect(run, 'validation')
         self.assertEqual(pd.read_csv(report/'feature_size_selection.csv')['size'].tolist(), [3])
         sweep.worker(run, 'final', 0)
+        sweep.worker(run, 'final', 1)
         final = sweep.collect(run, 'final')
         self.assertTrue((final/'holdout_metrics.json').exists())
-        self.assertTrue((final/'shap_seed_mean_3.npz').exists())
+        reference = json.loads((final/'shap_reference.json').read_text())
+        self.assertEqual(len(reference['observation_ids']), 100)
+        self.assertEqual(reference['mode'], 'low-risk-quartile')
+        with self.assertRaisesRegex(ValueError, 'Missing explain'):
+            sweep.collect(run, 'explain')
+        sweep.worker(run, 'explain', 0)
+        chunks = run/'explain/task_000000/chunks'
+        before = {p.name: sweep.digest(p) for p in chunks.glob('*.npz')}
+        self.assertEqual(len(before), 3)
+        # Simulate interruption after complete chunks but before final marker publication.
+        (run/'explain/task_000000/complete.json').unlink()
+        sweep.worker(run, 'explain', 0)
+        self.assertEqual(before, {p.name: sweep.digest(p) for p in chunks.glob('*.npz')})
+        sweep.worker(run, 'explain', 1)
+        explained = sweep.collect(run, 'explain')
+        values = np.load(explained/'size_3/values.npy')
+        self.assertEqual(values.shape, (100, 3))
+        first_chunks = []
+        for seed in range(2):
+            directory = run/'explain'/f'task_{seed:06d}'/'chunks'
+            marker = json.loads((directory/'chunk_000000000.npz.json').read_text())
+            with np.load(directory/marker['file']) as data:
+                self.assertEqual(data['background_ids'].tolist(), reference['background_ids'])
+                first_chunks.append(data['values'])
+        np.testing.assert_allclose(values[:40], np.mean(first_chunks, axis=0))
+        metadata = json.loads((explained/'size_3/metadata.json').read_text())
+        self.assertEqual(metadata['background_ids'], reference['background_ids'])
+        np.testing.assert_allclose(np.load(explained/'size_3/prediction.npy'),
+                                   pd.read_csv(final/'cell_raw_scores_by_size.csv')['3'], atol=1e-6)
+        np.testing.assert_allclose(np.load(explained/'size_3/residual.npy'),
+                np.load(explained/'size_3/prediction.npy')-metadata['base_value']-values.sum(axis=1))
         for path in (run/'features').glob('*.json'):
             self.assertEqual(json.loads(path.read_text()), ['gene_9', 'gene_1', 'gene_4'])
 
