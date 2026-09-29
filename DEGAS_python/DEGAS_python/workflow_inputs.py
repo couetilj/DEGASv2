@@ -36,4 +36,3 @@ def read_inputs(folder):
         raise ValueError('Use an independent cell-reference cohort for this tutorial; '
                          'overlapping donors require fold-specific cell exclusion')
     return bulk.loc[meta.patient_id], meta, cells
-
