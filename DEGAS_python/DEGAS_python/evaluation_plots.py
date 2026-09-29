@@ -50,7 +50,7 @@ def plot_validation(metrics, selection, *, title='DEGAS validation', output_dir=
                 axis.plot(part['size'], part[metric], 'o-', color=color, alpha=.5, label=str(study))
         ax.plot(s['size'], s.mean_AUROC, 'o-', color='#111111', lw=2.2, label='Equal-study mean')
         ax.scatter([best['size']], [best.mean_AUROC], s=180, facecolors='none',
-                   edgecolors='#E69F00', linewidths=2, zorder=5, label='Best mean')
+                   edgecolors='#E69F00', linewidths=2, zorder=5, label=f'Best mean ({int(best["size"])} genes)')
         chosen = s[s.selected]
         ax.scatter(chosen['size'], chosen.mean_AUROC, marker='s', s=75,
                    facecolors='none', edgecolors='#009E73', label='Within 1 SE')
@@ -74,10 +74,22 @@ def plot_validation(metrics, selection, *, title='DEGAS validation', output_dir=
         for axis in [ax, *list(axes.flat)[:-1]]:
             axis.set_xscale('log')
             axis.set_xlabel('Feature-set size')
-            axis.set_xticks(sizes)
+            ticks = sizes
+            if len(sizes) > 8:
+                # Keep endpoints and thin crowded labels; every candidate is plotted.
+                gap = (np.log10(sizes[-1])-np.log10(sizes[0])) / (10 if axis is ax else 6)
+                ticks = [sizes[0]]
+                for size in sizes[1:-1]:
+                    if np.log10(size/ticks[-1]) >= gap:
+                        ticks.append(size)
+                if len(ticks) > 1 and np.log10(sizes[-1]/ticks[-1]) < gap:
+                    ticks.pop()
+                ticks.append(sizes[-1])
+            axis.set_xticks(ticks)
             axis.xaxis.set_major_formatter(ScalarFormatter())
             axis.xaxis.set_minor_locator(NullLocator())
-            axis.tick_params(axis='x', rotation=35)
+            axis.tick_params(axis='x', rotation=45 if len(sizes) > 8 else 35,
+                             labelsize=9 if len(sizes) > 8 else 12)
         panels.suptitle(title + ' — tuning metrics')
         caption_axis.text(.5, .5, 'Paired patient bootstrap within study × diagnosis; SE is not a 95% CI.\n'
                           'Size selection uses validation data; assess final performance on the untouched holdout.',

@@ -20,6 +20,6 @@ jobs:
       - name: Study and patient end-to-end smoke checks
         run: |
           python examples/validation/run.py --output /tmp/study --split study --sizes 10 20 --seeds 1 --iters 2 --bootstrap 100 --shap --shap-samples 32
-          python examples/validation/run.py --output /tmp/patient --split patient --folds 3 --sizes 10 20 --seeds 1 --iters 2 --bootstrap 100
+          python examples/validation/run.py --output /tmp/patient --split patient --folds 3 --feature-mode empirical --seeds 1 --iters 2 --bootstrap 100
         env:
           MPLBACKEND: Agg

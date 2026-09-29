@@ -144,15 +144,31 @@ stage took 862.45 seconds (including transfer-file loading/writing, excluding
 Seurat preprocessing and R export); default source quotas yielded 666 unique
 genes. Runtime is dataset/environment dependent, not a paired speedup benchmark.
 
-## Validation, gene-set-size ensembles, evaluation plots and SHAP
+## Validation, feature selection, evaluation plots and SHAP
 
-The [runnable Python tutorial](examples/validation/README.md) covers raw-count
-preprocessing, DEGAS training, selectable **study-level or patient-level** folds,
-a default 10% patient holdout (or at least one whole study), and native AUROC /
-five-metric plots. It selects all gene-set sizes within one bootstrap SE of the
-best validation AUROC, then averages their per-size DEGAS percentile ranks.
-Final holdout evaluation is kept separate from size selection.
+The [Python guide](examples/validation/README.md) provides two workflows with the
+same preprocessing, study/patient validation, five-metric evaluation plots and
+untouched final holdout (default 10% of patients or at least one whole study).
 
-[Direct SHAP](DIRECT_SHAP.md) explains DEGAS class probabilities through the
-trained network, without a surrogate. Both features are optional; existing R
-and Python training calls continue to work.
+### User-defined feature set & sizes
+
+Supply an exact gene list with `--genes my_genes.txt`, or one or more counts of
+training-bulk highly variable genes with `--sizes 500 1500 5000 10000`. Every
+requested gene/count must be available in both input assays. An exact list is
+preserved; variable genes are selected separately inside each training fold.
+
+### Empirically-derived feature set size
+
+Use `--feature-mode empirical` to evaluate a default grid from 10 through 10,000
+genes plus the full shared-gene count, bounded by available features. The final
+sizes are determined by validation: retain all sizes within one bootstrap SE of
+the best equal-study AUROC, then average their per-size DEGAS percentile ranks.
+`--max-genes` optionally limits the search budget.
+
+The guide includes [parallel SLURM training and pooling](examples/validation/README.md#parallel-training-and-pooling-with-slurm):
+one task per fold × size × seed, frozen input/split manifests, resumable workers,
+a success-dependent pooling job, and a separate final-training array. The same
+engine also runs locally. Incomplete arrays cannot choose retained sizes.
+
+[Direct SHAP](DIRECT_SHAP.md) explains class probabilities through the trained
+network, without a surrogate. Existing R and Python training calls remain valid.

@@ -22,18 +22,23 @@ torch.backends.cudnn.deterministic = True
 
 def run_model(opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat = None, sc_lab_mat = None,
               pat_eval_expr_mat = None, pat_eval_lab_mat = None, pat_eval_ids = None,
-              heldout_group = None, return_model = False):
+              heldout_group = None, return_model = False,
+              sc_eval_expr_mat = None, sc_eval_lab_mat = None):
     """Train one DEGAS model and write its usual outputs.
 
     With return_model=True also return the fitted model for direct prediction
     and SHAP: ``directory, model = run_model(...)``. The default still returns
     only the directory. Call model.set_evaluate_mode() before inference.
+    Optional sc_eval_expr_mat/sc_eval_lab_mat limit cell evaluation output without
+    changing the training reference. They must have matching rows if supplied.
     """
     # define data loaders and model
     high_reso_loader, low_reso_loader = load_datasets("train", opt, pat_expr_mat, pat_lab_mat, sc_expr_mat, sc_loc_mat, sc_lab_mat)
     eval_expr = pat_expr_mat if pat_eval_expr_mat is None else pat_eval_expr_mat
     eval_label = pat_lab_mat if pat_eval_lab_mat is None else pat_eval_lab_mat
-    high_reso_eval_loader, low_reso_eval_loader = load_datasets("eval", opt, eval_expr, eval_label, sc_expr_mat, sc_loc_mat, sc_lab_mat)
+    high_eval = sc_expr_mat if sc_eval_expr_mat is None else sc_eval_expr_mat
+    high_labels = sc_lab_mat if sc_eval_expr_mat is None else sc_eval_lab_mat
+    high_reso_eval_loader, low_reso_eval_loader = load_datasets("eval", opt, eval_expr, eval_label, high_eval, sc_loc_mat, high_labels)
 
     # define the model
     first_item = next(iter(low_reso_eval_loader))
